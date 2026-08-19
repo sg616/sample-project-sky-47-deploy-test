@@ -124,6 +124,82 @@ From a browser, open `http://<host-ip>/` and use the buttons (Health / Info / Ec
    docker compose pull && docker compose up -d
    ```
 
+## 9. Alternative: Git clone and build directly on the remote server
+
+Instead of pushing images to Docker Hub, you can clone this repo on the deployment host and build the images there. No Docker Hub account is needed.
+
+### 9.1 Install prerequisites on the server (Ubuntu 24.04)
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER   # log out and back in for this to take effect
+```
+
+Verify:
+
+```bash
+docker --version
+docker compose version
+```
+
+### 9.2 Clone the repository
+
+```bash
+cd ~
+git clone https://github.com/sg616/sample-project-sky-47-deploy-test.git
+cd sample-project-sky-47-deploy-test
+```
+
+> If the repo is private, use a GitHub **personal access token**:
+> `git clone https://<username>:<token>@github.com/sg616/sample-project-sky-47-deploy-test.git`
+> or set up an SSH deploy key and clone via SSH.
+
+### 9.3 Build and deploy
+
+The repo's `docker-compose.yml` already builds from source (`build: ./backend`, `build: ./frontend`), so a single command builds both images on the server and starts them:
+
+```bash
+docker compose up -d --build
+```
+
+Verify as in section 7:
+
+```bash
+docker compose ps
+curl http://localhost:8080/api/health
+curl http://localhost/
+```
+
+### 9.4 Updating to a new version
+
+```bash
+cd ~/sample-project-sky-47-deploy-test
+git pull
+docker compose up -d --build   # rebuilds only what changed
+docker image prune -f          # optional: clean up old dangling images
+```
+
+### 9.5 Security group changes (AWS)
+
+Inbound rules needed on the instance's security group:
+
+| Port | Protocol | Source | Purpose |
+|---|---|---|---|
+| 22 | TCP | Your IP / admin CIDR only | SSH for clone/build/deploy |
+| 80 | TCP | 0.0.0.0/0 (or your users' CIDR) | Frontend (nginx) |
+| 443 | TCP | 0.0.0.0/0 | Only if you later add TLS |
+
+Outbound rules (default allow-all is fine). If outbound is restricted, allow:
+
+| Port | Protocol | Destination | Purpose |
+|---|---|---|---|
+| 443 | TCP | 0.0.0.0/0 | `git clone` from GitHub, pulling base images from Docker Hub, OS packages |
+| 80 | TCP | 0.0.0.0/0 | Some package mirrors |
+
+> **Do NOT open port 8080 to the internet.** The frontend's nginx proxies `/api/` to the backend inside the Docker network, so the backend never needs external exposure. To enforce this, change the backend port mapping in `docker-compose.yml` to `"127.0.0.1:8080:8080"` (or remove the `ports:` entry entirely) so it is reachable only from localhost and other containers.
+
 ## Troubleshooting
 
 | Problem | Fix |
