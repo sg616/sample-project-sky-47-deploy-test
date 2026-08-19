@@ -17,5 +17,5 @@ spec:
   outputDetail:
     type: LTS
     LTS:
-      ltsLogGroupID: bff6e526-615e-4903-8266-da682afdb3cb
-      ltsLogStreamID: 4380367a-7523-48b5-9aaf-965fd7c79c36
+      ltsGroupID: bff6e526-615e-4903-8266-da682afdb3cb
+      ltsStreamID: 4380367a-7523-48b5-9aaf-965fd7c79c36
