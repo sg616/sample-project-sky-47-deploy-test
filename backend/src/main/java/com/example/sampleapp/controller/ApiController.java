@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,8 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class ApiController {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiController.class);
+
     @GetMapping("/health")
     public Map<String, Object> health() {
+        log.info("GET /api/health called");
         Map<String, Object> response = new HashMap<>();
         response.put("status", "UP");
         response.put("timestamp", Instant.now().toString());
@@ -24,16 +29,19 @@ public class ApiController {
 
     @GetMapping("/info")
     public Map<String, Object> info() {
+        String env = System.getenv().getOrDefault("APP_ENV", "local");
+        log.info("GET /api/info called, environment={}", env);
         Map<String, Object> response = new HashMap<>();
         response.put("app", "sample-backend");
         response.put("version", "1.0.0");
         response.put("javaVersion", System.getProperty("java.version"));
-        response.put("environment", System.getenv().getOrDefault("APP_ENV", "local"));
+        response.put("environment", env);
         return response;
     }
 
     @PostMapping("/echo")
     public Map<String, Object> echo(@RequestBody Map<String, Object> body) {
+        log.info("POST /api/echo called, payload keys={}", body.keySet());
         Map<String, Object> response = new HashMap<>();
         response.put("received", body);
         response.put("timestamp", Instant.now().toString());
