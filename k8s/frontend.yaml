@@ -49,7 +49,7 @@ metadata:
   namespace: sample-app
   annotations:
     # Option A: bind an EXISTING shared ELB (get the ID from the sky47 ELB console)
-    kubernetes.io/elb.id: <ELB-ID>
+    kubernetes.io/elb.id: a168acbd-ad28-4c82-a57d-7229be2b7da8
     kubernetes.io/elb.class: union
     # Option B: auto-create an ELB instead — delete elb.id above and uncomment:
     # kubernetes.io/elb.autocreate: '{"type":"public","bandwidth_name":"sample-app-bw","bandwidth_chargemode":"traffic","bandwidth_size":5,"bandwidth_sharetype":"PER","eip_type":"5_bgp"}'
