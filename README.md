@@ -6,9 +6,10 @@ Minimal Java 11 backend (Spring Boot, no database) + Vue 3 frontend for validati
 
 ```
 sample-project/
-├── backend/    # Spring Boot 2.7 (Java 11), REST API, no DB
-├── frontend/   # Vue 3 + Vite, served by nginx in Docker
-└── docker-compose.yml
+├── backend/            # Spring Boot 2.7 (Java 11), REST API, no DB
+├── frontend/           # Vue 3 + Vite, served by nginx in Docker
+├── k8s/                # Kubernetes manifests for sky47 CCE
+└── K8S-DEPLOYMENT.md   # SWR + CCE + LTS deployment guide
 ```
 
 ## Backend
@@ -43,12 +44,10 @@ Runs on http://localhost:5173 and proxies `/api` to the backend on port 8080.
 
 Production build: `npm run build` (output in `frontend/dist`).
 
-## Docker / Deployment
+## Deployment (sky47 CCE / SWR)
 
-```bash
-docker compose up --build
-```
+Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to sky47 **SWR** (SoftWare Repository for Container), and deployed to a **CCE** Kubernetes cluster with logs shipped to **LTS** — see [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) for the full step-by-step guide.
 
 - Backend image: multi-stage Maven build → Temurin 11 JRE, exposes 8080
-- Frontend image: Node build → nginx, exposes 80, proxies `/api/` to `backend:8080` (adjust `frontend/nginx.conf` for your ECS/sky47 service discovery name)
-- Use `/actuator/health` or `/api/health` as the container/ALB health check path
+- Frontend image: Node build → nginx, exposes 80, proxies `/api/` to `backend:8080` (the k8s backend Service must be named `backend`)
+- Use `/actuator/health` or `/api/health` as the probe/LB health check path
