@@ -136,12 +136,18 @@ Both containers already write logs to stdout, so only collection needs configuri
 
 ### 7.2 Option A — log-agent add-on (Cloud Native Logging)
 
-1. CCE → cluster → **Add-ons → Cloud Native Logging (log-agent) → Install** (accept defaults).
+1. CCE → cluster → **Add-ons → Cloud Native Logging (log-agent) → Install** (accept defaults). The CRD-based `LogConfig` policy below requires add-on version **1.6.1 or later**.
 2. Edit `k8s/logconfig.yaml`: replace `<LTS-LOG-GROUP-ID>` and `<LTS-LOG-STREAM-ID>` with the IDs from 7.1, then:
    ```bash
    kubectl apply -f k8s/logconfig.yaml
    ```
    This collects stdout of **all containers in the `sample-app` namespace** into your LTS stream.
+
+   > ⚠️ The `LogConfig` resource must live in **`kube-system`** — that namespace is fixed by
+   > the add-on, not a choice, because the log-agent only watches collection rules there. The rule
+   > selects the app namespace via `spec.inputDetail.containerStdout.namespaces`, *not* via
+   > `metadata.namespace`. Applying it to `sample-app` succeeds and `kubectl get logconfig -n sample-app`
+   > shows it as created, but nothing ever collects and the LTS stream stays empty.
 3. Alternatively do the same from the console: CCE → cluster → **Logging → Collection Policies → Create**, source = container stdout, namespace = `sample-app`, target = your LTS group/stream.
 
 ### 7.3 Option B — ICAgent + AOM (older HCS clusters)
@@ -152,9 +158,16 @@ Both containers already write logs to stdout, so only collection needs configuri
 
 ### 7.4 Verify logs arrive
 
-1. Generate traffic: open the app and click Health / Info / Echo a few times.
-2. Console → **LTS → your log group → sample-app-stdout** — you should see nginx access lines and Spring Boot log lines within ~1 minute.
-3. Optional: set up structuring/alarms in LTS as needed.
+1. Confirm the collection rule is registered where the agent reads it (Option A only):
+   ```bash
+   kubectl get logconfig -n kube-system                              # sample-app-stdout must be listed here
+   kubectl get logconfig sample-app-stdout -n kube-system -o yaml    # check namespaces + LTS IDs
+   ```
+2. Generate traffic: open the app and click Health / Info / Echo a few times.
+3. Confirm the lines exist at the source: `kubectl logs deploy/backend -n sample-app | tail`.
+4. Console → **LTS → your log group → sample-app-stdout** — you should see nginx access lines and Spring Boot log lines within ~1 minute.
+5. If the stream is still empty, check the agent for LTS errors: `kubectl logs -n kube-system -l app=log-agent --tail=100`.
+6. Optional: set up structuring/alarms in LTS as needed.
 
 ## 8. Releasing an update
 
@@ -183,4 +196,4 @@ kubectl rollout status deployment/backend -n sample-app
 | frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
 | Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`, or autocreate JSON invalid — `kubectl describe svc frontend -n sample-app` shows the event error |
 | Browser can't reach EXTERNAL-IP | ELB is private (no EIP) — use a public ELB, or bind an EIP to it |
-| No logs in LTS | Check agent pods in `kube-system` are Running; confirm log group/stream IDs in `logconfig.yaml`; confirm the collection policy targets namespace `sample-app` |
+| No logs in LTS (but `kubectl logs` works) | Most common cause: the `LogConfig` was applied to the app namespace instead of `kube-system` — it is accepted there but never read. Verify with `kubectl get logconfig -n kube-system`. Then check agent pods in `kube-system` are Running; confirm the log group/stream IDs in `logconfig.yaml` belong to the same region/project as the cluster; confirm `spec.inputDetail.containerStdout.namespaces` includes `sample-app` |
