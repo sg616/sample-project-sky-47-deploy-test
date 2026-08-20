@@ -1,19 +1,27 @@
 # OPTIONAL — only needed if your CCE cluster uses the "Cloud Native Logging"
-# (log-agent) add-on. If your cluster uses ICAgent + AOM, configure log
-# collection from the console instead (see K8S-DEPLOYMENT.md section 7).
+# (log-agent) add-on, version 1.6.1 or later. If your cluster uses ICAgent +
+# AOM, configure log collection from the console instead (see
+# K8S-DEPLOYMENT.md section 7).
 #
 # Collects stdout of all containers in the sample-app namespace and ships it
 # to the LTS log group/stream you created. Replace the two IDs below.
+#
+# NOTE: metadata.namespace MUST be kube-system — the log-agent only watches
+# LogConfig resources there. A LogConfig created in any other namespace is
+# accepted by the API server but silently ignored, so no logs ever arrive.
 apiVersion: logging.openvessel.io/v1
 kind: LogConfig
 metadata:
   name: sample-app-stdout
-  namespace: sample-app
+  namespace: kube-system
 spec:
   inputDetail:
     type: container_stdout
     containerStdout:
       allContainers: true
+      # Namespaces to collect from; an empty list [] means ALL namespaces.
+      namespaces:
+        - sample-app
   outputDetail:
     type: LTS
     LTS:
