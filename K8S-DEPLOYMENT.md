@@ -1,6 +1,6 @@
-# Kubernetes Deployment Guide — sky47 Cloud (CCE + SWR + LTS)
+# Kubernetes Deployment Guide — sky47 Cloud (CCE + SWR + ICAgent/LTS)
 
-Deploy the sample app to a Kubernetes (CCE) cluster on sky47 cloud, pulling images from sky47 SWR (SoftWare Repository for Container) and shipping container logs to the sky47 log service (LTS / AOM Log Center).
+Deploy the sample app to a Kubernetes (CCE) cluster on sky47 cloud, pulling images from sky47 SWR (SoftWare Repository for Container) and collecting container logs with ICAgent into LTS (Log Tank Service) via a CCE ingestion configuration.
 
 sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below follow HCS conventions. Reference docs: https://docs.financialkhazanapk.cloud/mohelpcenter/operation/en-us/index.html
 
@@ -9,7 +9,7 @@ sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below 
 ```
 Browser → ELB (public EIP) → frontend Service (LoadBalancer)
             → frontend pod (nginx) → /api/ proxied → backend Service (ClusterIP) → backend pod (Spring Boot)
-Container stdout → ICAgent / log-agent (DaemonSet on nodes) → LTS log group/stream
+Container stdout → node log files → ICAgent (on every node) → LTS log stream (CCE ingestion configuration)
 ```
 
 No application code changes are required:
@@ -124,50 +124,15 @@ curl http://<EXTERNAL-IP>/                                       # frontend HTML
 curl http://<EXTERNAL-IP>/api/health                             # {"status":"UP",...} via nginx proxy
 ```
 
-## 7. Ship container logs to the sky47 log service (LTS)
+## 7. Collect container logs with ICAgent (LTS CCE ingestion)
 
-Both containers already write logs to stdout, so only collection needs configuring. CCE clusters ship logs via a node-level agent; depending on the CCE version sky47 runs, it is either **ICAgent (AOM)** or the **log-agent add-on (Cloud Native Logging)**. Check which add-on your cluster has: Console → **CCE → your cluster → Add-ons**.
+Both containers already write logs to stdout, so only collection needs configuring. ICAgent on each node collects container stdout and reports it to LTS via a **CCE (Cloud Container Engine)** ingestion configuration — no in-cluster `LogConfig` resource and no manual node file paths are needed (the earlier `k8s/logconfig.yaml` / log-agent approach was removed).
 
-### 7.1 Create the LTS log group and stream
+Full step-by-step instructions (based on the LTS 2.5.0 User Guide): **[CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md)**. In short:
 
-1. Console → **LTS (Log Tank Service) → Log Management → Create Log Group**, e.g. `sample-app-logs` (set retention, e.g. 7 days).
-2. Inside it, **Create Log Stream**, e.g. `sample-app-stdout`.
-3. Note the **log group ID** and **log stream ID** (shown in each item's details).
-
-### 7.2 Option A — log-agent add-on (Cloud Native Logging)
-
-1. CCE → cluster → **Add-ons → Cloud Native Logging (log-agent) → Install** (accept defaults). The CRD-based `LogConfig` policy below requires add-on version **1.6.1 or later**.
-2. Edit `k8s/logconfig.yaml`: replace `<LTS-LOG-GROUP-ID>` and `<LTS-LOG-STREAM-ID>` with the IDs from 7.1, then:
-   ```bash
-   kubectl apply -f k8s/logconfig.yaml
-   ```
-   This collects stdout of **all containers in the `sample-app` namespace** into your LTS stream.
-
-   > ⚠️ The `LogConfig` resource must live in **`kube-system`** — that namespace is fixed by
-   > the add-on, not a choice, because the log-agent only watches collection rules there. The rule
-   > selects the app namespace via `spec.inputDetail.containerStdout.namespaces`, *not* via
-   > `metadata.namespace`. Applying it to `sample-app` succeeds and `kubectl get logconfig -n sample-app`
-   > shows it as created, but nothing ever collects and the LTS stream stays empty.
-3. Alternatively do the same from the console: CCE → cluster → **Logging → Collection Policies → Create**, source = container stdout, namespace = `sample-app`, target = your LTS group/stream.
-
-### 7.3 Option B — ICAgent + AOM (older HCS clusters)
-
-1. CCE → cluster → **Add-ons → ICAgent** — ensure it is installed and Running on every node (`kubectl get pods -n kube-system | grep icagent`).
-2. ICAgent collects container stdout automatically. View logs under **AOM → Log → Log Search**, filtering by cluster / namespace `sample-app` / workload name.
-3. To also store them in LTS: **AOM → Log → Log Dump** (or LTS → Access → CCE) and map the `sample-app` workloads to the log group/stream from 7.1.
-
-### 7.4 Verify logs arrive
-
-1. Confirm the collection rule is registered where the agent reads it (Option A only):
-   ```bash
-   kubectl get logconfig -n kube-system                              # sample-app-stdout must be listed here
-   kubectl get logconfig sample-app-stdout -n kube-system -o yaml    # check namespaces + LTS IDs
-   ```
-2. Generate traffic: open the app and click Health / Info / Echo a few times.
-3. Confirm the lines exist at the source: `kubectl logs deploy/backend -n sample-app | tail`.
-4. Console → **LTS → your log group → sample-app-stdout** — you should see nginx access lines and Spring Boot log lines within ~1 minute.
-5. If the stream is still empty, check the agent for LTS errors: `kubectl logs -n kube-system -l app=log-agent --tail=100`.
-6. Optional: set up structuring/alarms in LTS as needed.
+1. **LTS → Host Management → Hosts → CCE Cluster tab** — install/upgrade ICAgent on the cluster (auto-creates log group + host group `k8s-log-{ClusterID}`).
+2. **LTS → Log Ingestion → Ingestion Center → CCE** — pick fixed or custom log stream, run the dependency check (**Auto Correct**), keep host group `k8s-log-{ClusterID}`, data source **Container standard output**, namespace regex `^sample-app$`. Ensure **Output to AOM is disabled**.
+3. Verify in **LTS → Log Management** → your stream after generating traffic.
 
 ## 8. Releasing an update
 
@@ -196,4 +161,4 @@ kubectl rollout status deployment/backend -n sample-app
 | frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
 | Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`, or autocreate JSON invalid — `kubectl describe svc frontend -n sample-app` shows the event error |
 | Browser can't reach EXTERNAL-IP | ELB is private (no EIP) — use a public ELB, or bind an EIP to it |
-| No logs in LTS (but `kubectl logs` works) | Most common cause: the `LogConfig` was applied to the app namespace instead of `kube-system` — it is accepted there but never read. Verify with `kubectl get logconfig -n kube-system`. Then check agent pods in `kube-system` are Running; confirm the log group/stream IDs in `logconfig.yaml` belong to the same region/project as the cluster; confirm `spec.inputDetail.containerStdout.namespaces` includes `sample-app` |
+| No logs in the LTS stream (but `kubectl logs` works) | Check ICAgent status is **Running** on the LTS → Host Management → CCE Cluster tab; ensure **Output to AOM is disabled**; rerun the ingestion wizard's dependency check (**Auto Correct**); confirm the namespace regex matches `sample-app` — see [CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md) troubleshooting |

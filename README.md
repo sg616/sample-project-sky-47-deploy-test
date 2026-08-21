@@ -9,7 +9,8 @@ sample-project/
 ├── backend/            # Spring Boot 2.7 (Java 11), REST API, no DB
 ├── frontend/           # Vue 3 + Vite, served by nginx in Docker
 ├── k8s/                # Kubernetes manifests for sky47 CCE
-└── K8S-DEPLOYMENT.md   # SWR + CCE + LTS deployment guide
+├── K8S-DEPLOYMENT.md   # SWR + CCE + ICAgent/LTS deployment guide
+└── CCE-LOG-COLLECTION.md # CCE container log collection via ICAgent + LTS
 ```
 
 ## Backend
@@ -46,7 +47,7 @@ Production build: `npm run build` (output in `frontend/dist`).
 
 ## Deployment (sky47 CCE / SWR)
 
-Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to sky47 **SWR** (SoftWare Repository for Container), and deployed to a **CCE** Kubernetes cluster with logs shipped to **LTS** — see [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) for the full step-by-step guide.
+Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to sky47 **SWR** (SoftWare Repository for Container), and deployed to a **CCE** Kubernetes cluster with container logs collected by **ICAgent** into **LTS** — see [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) for the full step-by-step guide and [CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md) for the log collection setup.
 
 - Backend image: multi-stage Maven build → Temurin 11 JRE, exposes 8080
 - Frontend image: Node build → nginx, exposes 80, proxies `/api/` to `backend:8080` (the k8s backend Service must be named `backend`)
