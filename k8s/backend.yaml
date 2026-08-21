@@ -27,7 +27,7 @@ spec:
               value: sky47
             # Point DB_HOST at the RDS for MySQL instance address (see K8S-DEPLOYMENT.md)
             - name: DB_HOST
-              value: <rds-mysql-instance-address>
+              value: 10.10.1.20
             - name: DB_PORT
               value: "3306"
             - name: DB_NAME
