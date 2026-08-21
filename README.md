@@ -10,7 +10,8 @@ sample-project/
 ├── frontend/           # Vue 3 + Vite product catalog UI, served by nginx in Docker
 ├── dbscripts/          # SQL scripts: schema + seed data for RDS for MySQL
 ├── k8s/                # Kubernetes manifests for sky47 CCE
-├── K8S-DEPLOYMENT.md   # SWR + CCE + RDS + ICAgent/LTS deployment guide
+├── K8S-DEPLOYMENT.md   # SWR + CCE + RDS + ICAgent/LTS deployment guide (from scratch)
+├── NEW-SETUP-DEPLOYMENT.md # Updating the already-running cluster to the RDS + CRUD setup
 └── CCE-LOG-COLLECTION.md # CCE container log collection via ICAgent + LTS
 ```
 
@@ -57,7 +58,7 @@ Production build: `npm run build` (output in `frontend/dist`).
 
 ## Deployment (sky47 CCE / SWR / RDS)
 
-Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to sky47 **SWR** (SoftWare Repository for Container), and deployed to a **CCE** Kubernetes cluster backed by an **RDS for MySQL 5.7.44** instance, with container logs collected by **ICAgent** into **LTS** — see [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) for the full step-by-step guide (including RDS setup) and [CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md) for the log collection setup.
+Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to sky47 **SWR** (SoftWare Repository for Container), and deployed to a **CCE** Kubernetes cluster backed by an **RDS for MySQL 5.7.44** instance, with container logs collected by **ICAgent** into **LTS** — see [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) for the full step-by-step guide (including RDS setup) and [CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md) for the log collection setup. Already have the previous version running in the cluster? Use [NEW-SETUP-DEPLOYMENT.md](NEW-SETUP-DEPLOYMENT.md) to roll out the RDS + CRUD version over it.
 
 - Backend image: multi-stage Maven build → Temurin 11 JRE, exposes 8080
 - Frontend image: Node build → nginx, exposes 80, proxies `/api/` to `backend:8080` (the k8s backend Service must be named `backend`)
