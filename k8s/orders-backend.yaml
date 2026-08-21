@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-backend
+  namespace: sample-app
+  labels:
+    app: orders-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders-backend
+  template:
+    metadata:
+      labels:
+        app: orders-backend
+    spec:
+      imagePullSecrets:
+        - name: default-secret
+      containers:
+        - name: orders-backend
+          image: swr.pk-isb-1.sky47.com/pk-beta-repo/sample-orders-backend:1.0.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: sky47
+            # Same RDS host as the catalog backend, but a DIFFERENT database (ordersdb).
+            # Create it with dbscripts/003_create_orders_db.sql.
+            - name: DB_HOST
+              value: 10.10.1.20
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: ordersdb
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_PASSWORD
+          readinessProbe:
+            httpGet:
+              # App serves under context-path /orders-api
+              path: /orders-api/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /orders-api/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Must stay "orders-backend" — frontend nginx proxies /orders-api/ to http://orders-backend:8080
+  name: orders-backend
+  namespace: sample-app
+spec:
+  type: ClusterIP
+  selector:
+    app: orders-backend
+  ports:
+    - port: 8080
+      targetPort: 8080
