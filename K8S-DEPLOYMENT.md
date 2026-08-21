@@ -117,6 +117,7 @@ The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to
 |---|---|---|
 | `<rds-mysql-instance-address>` | `k8s/backend.yaml` (`DB_HOST` env) | Internal address/IP of the RDS instance from step 6 |
 | `<ELB-ID>` | `k8s/frontend.yaml` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
+| `<CERT-ID>` | `k8s/frontend.yaml` | ID of the certificate uploaded to the ELB (console → **ELB → Certificates**) — needed for the HTTPS listener |
 
 Then apply (mysql-secret and backend first, so the `backend` Service DNS name exists before nginx starts):
 
@@ -131,7 +132,7 @@ Get the public address:
 
 ```bash
 kubectl get svc frontend -n sample-app
-# EXTERNAL-IP column = ELB address; open http://<EXTERNAL-IP>/ in a browser
+# EXTERNAL-IP column = ELB address; open https://<EXTERNAL-IP>/ in a browser
 ```
 
 Quick checks:
@@ -140,9 +141,9 @@ Quick checks:
 kubectl get pods -n sample-app                                   # all Running/Ready
 kubectl logs deploy/backend -n sample-app                        # Spring Boot startup logs
 kubectl exec -n sample-app deploy/frontend -- wget -qO- http://backend:8080/api/health
-curl http://<EXTERNAL-IP>/                                       # frontend HTML
-curl http://<EXTERNAL-IP>/api/health                             # {"status":"UP",...} via nginx proxy
-curl http://<EXTERNAL-IP>/api/products                           # seeded product list (JSON)
+curl https://<EXTERNAL-IP>/                                      # frontend HTML
+curl https://<EXTERNAL-IP>/api/health                            # {"status":"UP",...} via nginx proxy
+curl https://<EXTERNAL-IP>/api/products                          # seeded product list (JSON)
 ```
 
 ## 8. Collect container logs with ICAgent (LTS CCE ingestion)
@@ -169,7 +170,7 @@ kubectl rollout status deployment/backend -n sample-app
 ## 10. Network / security group notes
 
 - **Worker node security group** (created with the cluster): keep the CCE-generated rules; do not delete them. No extra inbound rule is needed for pod traffic — the ELB reaches NodePorts via the VPC.
-- **ELB**: must be a **public** ELB (has an EIP) for browser access. Listener port 80 is created automatically by the Service.
+- **ELB**: must be a **public** ELB (has an EIP) for browser access. An HTTPS listener on port 443 (with the uploaded certificate) is created automatically by the Service; TLS terminates at the ELB and traffic to nginx stays HTTP.
 - Do **not** expose the backend with its own LoadBalancer/NodePort — it stays ClusterIP, reachable only inside the cluster via nginx.
 - If kubectl access from your laptop is needed, bind an EIP to the cluster API server and restrict its allowed CIDR to your IP.
 

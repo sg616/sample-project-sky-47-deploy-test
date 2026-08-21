@@ -68,7 +68,14 @@ In `k8s/backend.yaml`:
 
 In `k8s/frontend.yaml`:
 1. Update the image tag: `sample-frontend:1.0.0` → `:1.1.0`
-2. Leave the ELB annotation untouched — the running frontend Service/ELB is reused.
+2. The ELB ID stays the same — the running frontend Service/ELB is reused.
+3. HTTPS switch: the Service now declares an HTTPS listener (port 443, TLS terminated at the ELB). Fill in the certificate you uploaded to the ELB:
+   ```yaml
+   kubernetes.io/elb.autoset: "true"
+   kubernetes.io/elb.port: "443"
+   kubernetes.io/elb.cert: "<CERT-ID>"    # ELB console → Certificates → your certificate ID
+   ```
+   Applying `k8s/frontend.yaml` (next step) replaces the old HTTP listener on port 80 with the HTTPS one on 443.
 
 ## 5. Roll out
 
@@ -90,15 +97,15 @@ kubectl get pods -n sample-app                          # all Running/Ready
 kubectl logs deploy/backend -n sample-app               # Hikari pool started, no DB errors
 kubectl get svc frontend -n sample-app                  # EXTERNAL-IP = same ELB as before
 
-curl http://<EXTERNAL-IP>/api/health                    # {"status":"UP",...}
-curl http://<EXTERNAL-IP>/api/info                      # "database":{"status":"UP","product":"MySQL","version":"5.7.44",...}
-curl http://<EXTERNAL-IP>/api/products                  # seeded product list (JSON)
-curl -X POST http://<EXTERNAL-IP>/api/products \
+curl https://<EXTERNAL-IP>/api/health                   # {"status":"UP",...}
+curl https://<EXTERNAL-IP>/api/info                     # "database":{"status":"UP","product":"MySQL","version":"5.7.44",...}
+curl https://<EXTERNAL-IP>/api/products                 # seeded product list (JSON)
+curl -X POST https://<EXTERNAL-IP>/api/products \
   -H 'Content-Type: application/json' \
   -d '{"name":"Test Product","price":12.50,"stock":3}'  # 201 — then refresh the UI and delete it
 ```
 
-Then open `http://<EXTERNAL-IP>/` in a browser: the product catalog should show the seeded rows, and add/edit/delete should work end-to-end (UI → nginx → backend → RDS).
+Then open `https://<EXTERNAL-IP>/` in a browser: the product catalog should show the seeded rows, and add/edit/delete should work end-to-end (UI → nginx → backend → RDS).
 
 ## 7. Roll back if needed
 
