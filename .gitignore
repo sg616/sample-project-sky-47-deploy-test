@@ -1,5 +1,6 @@
 # Java
 backend/target/
+orders-backend/target/
 *.class
 *.jar
 !.mvn/wrapper/*.jar

@@ -8,13 +8,14 @@ sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below 
 
 ```
 Browser → ELB (public EIP) → frontend Service (LoadBalancer)
-            → frontend pod (nginx) → /api/ proxied → backend Service (ClusterIP) → backend pod (Spring Boot)
-            → RDS for MySQL 5.7.44 (products table)
+            → frontend pod (nginx) → /api/        proxied → backend Service (ClusterIP)        → backend pod (Spring Boot)
+                                   → /orders-api/ proxied → orders-backend Service (ClusterIP) → orders-backend pod (Spring Boot)
+            → RDS for MySQL 5.7.44 (sampleapp db ← backend, ordersdb db ← orders-backend; same host)
 Container stdout → node log files → ICAgent (on every node) → LTS log stream (CCE ingestion configuration)
 ```
 
 No application code changes are required:
-- `frontend/nginx.conf` proxies `/api/` to `http://backend:8080` — in k8s this resolves via the ClusterIP **Service named `backend`** in the same namespace.
+- `frontend/nginx.conf` proxies `/api/` to `http://backend:8080` and `/orders-api/` to `http://orders-backend:8080` — in k8s these resolve via the ClusterIP **Services named `backend` and `orders-backend`** in the same namespace. The two path-based routes are deliberately shaped like future API-gateway routes.
 - Spring Boot and nginx both log to **stdout/stderr**, which is exactly what the log collector picks up.
 
 ## Prerequisites
@@ -64,10 +65,12 @@ export SWR=swr.pk-isb-1.sky47.com
 export ORG=pk-beta-repo
 
 docker build -t $SWR/$ORG/sample-backend:1.0.0 ./backend
-docker build -t $SWR/$ORG/sample-frontend:1.0.0 ./frontend
+docker build -t $SWR/$ORG/sample-orders-backend:1.0.0 ./orders-backend
+docker build -t $SWR/$ORG/sample-frontend:1.1.0 ./frontend
 
 docker push $SWR/$ORG/sample-backend:1.0.0
-docker push $SWR/$ORG/sample-frontend:1.0.0
+docker push $SWR/$ORG/sample-orders-backend:1.0.0
+docker push $SWR/$ORG/sample-frontend:1.1.0
 ```
 
 Verify: Console → **SWR → My Images** — both repos should appear under the `beta-pk` organization.
@@ -103,7 +106,12 @@ The backend reads its DB connection from environment variables (`DB_HOST`, `DB_P
    mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/001_create_products.sql
    mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/002_seed_products.sql
    ```
-4. Create the credentials Secret in the cluster (do not commit the real password):
+4. Create the **second** database for the orders backend on the **same RDS host** (the orders backend reuses the same credentials Secret but points `DB_NAME` at `ordersdb`):
+   ```bash
+   mysql -h <rds-address> -P 3306 -u root -p < dbscripts/003_create_orders_db.sql
+   mysql -h <rds-address> -P 3306 -u root -p < dbscripts/004_seed_orders.sql
+   ```
+5. Create the credentials Secret in the cluster (do not commit the real password):
    ```bash
    cp k8s/mysql-secret.example.yaml k8s/mysql-secret.yaml   # then edit DB_USER / DB_PASSWORD
    kubectl apply -f k8s/mysql-secret.yaml
@@ -119,11 +127,13 @@ The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to
 | `<ELB-ID>` | `k8s/frontend.yaml` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
 | `<CERT-ID>` | `k8s/frontend.yaml` | ID of the certificate uploaded to the ELB (console → **ELB → Certificates**) — needed for the HTTPS listener |
 
-Then apply (mysql-secret and backend first, so the `backend` Service DNS name exists before nginx starts):
+Then apply (mysql-secret and both backends first, so the `backend` and `orders-backend` Service DNS names exist before nginx starts):
 
 ```bash
 kubectl apply -f k8s/backend.yaml
 kubectl rollout status deployment/backend -n sample-app
+kubectl apply -f k8s/orders-backend.yaml
+kubectl rollout status deployment/orders-backend -n sample-app
 kubectl apply -f k8s/frontend.yaml
 kubectl rollout status deployment/frontend -n sample-app
 ```
@@ -140,10 +150,14 @@ Quick checks:
 ```bash
 kubectl get pods -n sample-app                                   # all Running/Ready
 kubectl logs deploy/backend -n sample-app                        # Spring Boot startup logs
+kubectl logs deploy/orders-backend -n sample-app                 # orders service startup logs
 kubectl exec -n sample-app deploy/frontend -- wget -qO- http://backend:8080/api/health
+kubectl exec -n sample-app deploy/frontend -- wget -qO- http://orders-backend:8080/orders-api/health
 curl https://<EXTERNAL-IP>/                                      # frontend HTML
 curl https://<EXTERNAL-IP>/api/health                            # {"status":"UP",...} via nginx proxy
 curl https://<EXTERNAL-IP>/api/products                          # seeded product list (JSON)
+curl https://<EXTERNAL-IP>/orders-api/health                     # second backend via its own path
+curl https://<EXTERNAL-IP>/orders-api/orders                     # seeded order list (JSON)
 ```
 
 ## 8. Collect container logs with ICAgent (LTS CCE ingestion)
@@ -181,6 +195,7 @@ kubectl rollout status deployment/backend -n sample-app
 | Pod `ImagePullBackOff` | `kubectl describe pod` — check image path matches SWR exactly; ensure `default-secret` exists in `sample-app` (step 5); if image is Private, secret must use a long-term key |
 | `exec format error` in pod logs | Image built for wrong CPU arch — rebuild with `--platform linux/amd64` |
 | frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
+| frontend pod CrashLoop: `host not found in upstream "orders-backend"` | Orders backend Service missing — apply `k8s/orders-backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
 | Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`, or autocreate JSON invalid — `kubectl describe svc frontend -n sample-app` shows the event error |
 | Backend CrashLoopBackOff with `Communications link failure` in logs | RDS unreachable — check `DB_HOST` in `k8s/backend.yaml`, that `mysql-secret` exists with the right credentials, and that the RDS security group allows TCP 3306 from the cluster nodes |
 | Backend starts but `/api/products` returns 500 | `products` table missing or schema drift — run `dbscripts/001_create_products.sql` against the `sampleapp` database; confirm `DB_NAME` matches |
