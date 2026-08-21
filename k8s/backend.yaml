@@ -25,6 +25,23 @@ spec:
           env:
             - name: APP_ENV
               value: sky47
+            # Point DB_HOST at the RDS for MySQL instance address (see K8S-DEPLOYMENT.md)
+            - name: DB_HOST
+              value: <rds-mysql-instance-address>
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: sampleapp
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_PASSWORD
           readinessProbe:
             httpGet:
               path: /api/health

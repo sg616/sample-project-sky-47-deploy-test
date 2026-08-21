@@ -1,6 +1,6 @@
-# Kubernetes Deployment Guide — sky47 Cloud (CCE + SWR + ICAgent/LTS)
+# Kubernetes Deployment Guide — sky47 Cloud (CCE + SWR + RDS + ICAgent/LTS)
 
-Deploy the sample app to a Kubernetes (CCE) cluster on sky47 cloud, pulling images from sky47 SWR (SoftWare Repository for Container) and collecting container logs with ICAgent into LTS (Log Tank Service) via a CCE ingestion configuration.
+Deploy the sample app to a Kubernetes (CCE) cluster on sky47 cloud, pulling images from sky47 SWR (SoftWare Repository for Container), storing data in an RDS for MySQL database, and collecting container logs with ICAgent into LTS (Log Tank Service) via a CCE ingestion configuration.
 
 sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below follow HCS conventions. Reference docs: https://docs.financialkhazanapk.cloud/mohelpcenter/operation/en-us/index.html
 
@@ -9,6 +9,7 @@ sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below 
 ```
 Browser → ELB (public EIP) → frontend Service (LoadBalancer)
             → frontend pod (nginx) → /api/ proxied → backend Service (ClusterIP) → backend pod (Spring Boot)
+            → RDS for MySQL 5.7.44 (products table)
 Container stdout → node log files → ICAgent (on every node) → LTS log stream (CCE ingestion configuration)
 ```
 
@@ -19,9 +20,10 @@ No application code changes are required:
 ## Prerequisites
 
 - A CCE cluster created in the sky47 console (**Cloud Container Engine → Buy/Create Cluster**) with at least one node (2 vCPU / 4 GB is enough)
+- An RDS for MySQL instance (engine version **5.7.44**) in the same VPC as the cluster
 - `kubectl` installed on your workstation or a jump host
 - Docker installed locally (to build and push images)
-- Permissions for SWR, CCE, LTS, and ELB in your sky47 account
+- Permissions for SWR, CCE, RDS, LTS, and ELB in your sky47 account
 
 ## 1. Connect kubectl to the cluster
 
@@ -90,15 +92,33 @@ kubectl create secret docker-registry default-secret -n sample-app \
   --docker-password=<long-term-login-key>
 ```
 
-## 6. Edit the manifests and deploy
+## 6. Create the RDS database and run the init scripts
 
-The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to `swr.pk-isb-1.sky47.com/pk-beta-repo/...`. Only one placeholder remains — in `k8s/frontend.yaml` replace:
+The backend reads its DB connection from environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) and expects a `products` table. The schema is managed by hand-written scripts — Hibernate runs with `ddl-auto: none`.
 
-| Placeholder | Value |
-|---|---|
-| `<ELB-ID>` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
+1. Console → **RDS → Create Instance**: engine **MySQL**, version **5.7.44**. Choose the same VPC as the CCE cluster, set the root password, and create a database named **`sampleapp`** (or create it after provisioning). Note the **instance address** (internal endpoint/IP) and port **3306**.
+2. Allow traffic from the cluster to RDS: on the RDS instance's **security group**, add an inbound rule for TCP **3306** from the CCE node subnet (or the cluster's security group).
+3. Run the schema + seed scripts from `dbscripts/` against the `sampleapp` database (via the RDS console SQL window / DAS, or a mysql client):
+   ```bash
+   mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/001_create_products.sql
+   mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/002_seed_products.sql
+   ```
+4. Create the credentials Secret in the cluster (do not commit the real password):
+   ```bash
+   cp k8s/mysql-secret.example.yaml k8s/mysql-secret.yaml   # then edit DB_USER / DB_PASSWORD
+   kubectl apply -f k8s/mysql-secret.yaml
+   ```
 
-Then apply (backend first, so the `backend` Service DNS name exists before nginx starts):
+## 7. Edit the manifests and deploy
+
+The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to `swr.pk-isb-1.sky47.com/pk-beta-repo/...`. Two placeholders remain to fill in:
+
+| Placeholder | Where | Value |
+|---|---|---|
+| `<rds-mysql-instance-address>` | `k8s/backend.yaml` (`DB_HOST` env) | Internal address/IP of the RDS instance from step 6 |
+| `<ELB-ID>` | `k8s/frontend.yaml` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
+
+Then apply (mysql-secret and backend first, so the `backend` Service DNS name exists before nginx starts):
 
 ```bash
 kubectl apply -f k8s/backend.yaml
@@ -122,9 +142,10 @@ kubectl logs deploy/backend -n sample-app                        # Spring Boot s
 kubectl exec -n sample-app deploy/frontend -- wget -qO- http://backend:8080/api/health
 curl http://<EXTERNAL-IP>/                                       # frontend HTML
 curl http://<EXTERNAL-IP>/api/health                             # {"status":"UP",...} via nginx proxy
+curl http://<EXTERNAL-IP>/api/products                           # seeded product list (JSON)
 ```
 
-## 7. Collect container logs with ICAgent (LTS CCE ingestion)
+## 8. Collect container logs with ICAgent (LTS CCE ingestion)
 
 Both containers already write logs to stdout, so only collection needs configuring. ICAgent on each node collects container stdout and reports it to LTS via a **CCE (Cloud Container Engine)** ingestion configuration — no in-cluster `LogConfig` resource and no manual node file paths are needed (the earlier `k8s/logconfig.yaml` / log-agent approach was removed).
 
@@ -134,7 +155,7 @@ Full step-by-step instructions (based on the LTS 2.5.0 User Guide): **[CCE-LOG-C
 2. **LTS → Log Ingestion → Ingestion Center → CCE** — pick fixed or custom log stream, run the dependency check (**Auto Correct**), keep host group `k8s-log-{ClusterID}`, data source **Container standard output**, namespace regex `^sample-app$`. Ensure **Output to AOM is disabled**.
 3. Verify in **LTS → Log Management** → your stream after generating traffic.
 
-## 8. Releasing an update
+## 9. Releasing an update
 
 ```bash
 docker build -t $SWR/$ORG/sample-backend:1.0.1 ./backend
@@ -145,7 +166,7 @@ kubectl rollout status deployment/backend -n sample-app
 
 (Or edit the tag in `k8s/backend.yaml` and `kubectl apply -f` it — keeps the file as the source of truth.)
 
-## 9. Network / security group notes
+## 10. Network / security group notes
 
 - **Worker node security group** (created with the cluster): keep the CCE-generated rules; do not delete them. No extra inbound rule is needed for pod traffic — the ELB reaches NodePorts via the VPC.
 - **ELB**: must be a **public** ELB (has an EIP) for browser access. Listener port 80 is created automatically by the Service.
@@ -160,5 +181,8 @@ kubectl rollout status deployment/backend -n sample-app
 | `exec format error` in pod logs | Image built for wrong CPU arch — rebuild with `--platform linux/amd64` |
 | frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
 | Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`, or autocreate JSON invalid — `kubectl describe svc frontend -n sample-app` shows the event error |
+| Backend CrashLoopBackOff with `Communications link failure` in logs | RDS unreachable — check `DB_HOST` in `k8s/backend.yaml`, that `mysql-secret` exists with the right credentials, and that the RDS security group allows TCP 3306 from the cluster nodes |
+| Backend starts but `/api/products` returns 500 | `products` table missing or schema drift — run `dbscripts/001_create_products.sql` against the `sampleapp` database; confirm `DB_NAME` matches |
+| `/api/info` shows `"database":{"status":"DOWN"}` | Backend is up but the DB connection fails — check credentials/security group as above, then look at backend logs |
 | Browser can't reach EXTERNAL-IP | ELB is private (no EIP) — use a public ELB, or bind an EIP to it |
 | No logs in the LTS stream (but `kubectl logs` works) | Check ICAgent status is **Running** on the LTS → Host Management → CCE Cluster tab; ensure **Output to AOM is disabled**; rerun the ingestion wizard's dependency check (**Auto Correct**); confirm the namespace regex matches `sample-app` — see [CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md) troubleshooting |
