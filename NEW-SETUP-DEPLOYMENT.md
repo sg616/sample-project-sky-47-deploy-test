@@ -72,8 +72,8 @@ In `k8s/frontend.yaml`:
 3. HTTPS switch: the Service now declares an HTTPS listener (port 443, TLS terminated at the ELB). Fill in the certificate you uploaded to the ELB:
    ```yaml
    kubernetes.io/elb.autoset: "true"
-   kubernetes.io/elb.port: "443"
-   kubernetes.io/elb.cert: "<CERT-ID>"    # ELB console → Certificates → your certificate ID
+   kubernetes.io/elb.protocol-port: "https:443"
+   kubernetes.io/elb.cert-id: "<CERT-ID>"   # ELB console → Certificates → your certificate ID
    ```
    Applying `k8s/frontend.yaml` (next step) replaces the old HTTP listener on port 80 with the HTTPS one on 443.
 
