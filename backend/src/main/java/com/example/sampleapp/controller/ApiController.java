@@ -20,12 +20,6 @@ public class ApiController {
 
     private static final Logger log = LoggerFactory.getLogger(ApiController.class);
 
-    private final DbStatusService dbStatusService;
-
-    public ApiController(DbStatusService dbStatusService) {
-        this.dbStatusService = dbStatusService;
-    }
-
     @GetMapping("/health")
     public Map<String, Object> health() {
         log.info("GET /api/health called");
@@ -44,7 +38,6 @@ public class ApiController {
         response.put("version", "1.0.0");
         response.put("javaVersion", System.getProperty("java.version"));
         response.put("environment", env);
-        response.put("database", dbStatusService.status());
         return response;
     }
 
