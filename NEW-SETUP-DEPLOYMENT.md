@@ -26,7 +26,7 @@ Everything else (Services, ELB, nginx `/api/` proxy, ICAgent/LTS log collection)
 
 1. Console → **RDS → Create Instance**: engine **MySQL**, version **5.7.44**, same VPC as the CCE cluster. Set the root password and create a database named **`sampleapp`**. Note the instance address and port **3306**.
 2. Security group: allow inbound TCP **3306** from the CCE node subnet (or the cluster security group), so pods can reach RDS.
-3. Run the schema + seed scripts against `sampleapp` (RDS console SQL window / DAS, or a mysql client):
+3. Run the schema + seed scripts against `sampleapp` (RDS console SQL window / DAS, or a mysql client). From the repo root:
    ```bash
    mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/001_create_products.sql
    mysql -h <rds-address> -P 3306 -u root -p sampleapp < dbscripts/002_seed_products.sql
@@ -35,7 +35,7 @@ Everything else (Services, ELB, nginx `/api/` proxy, ICAgent/LTS log collection)
 ## 2. Create the DB credentials Secret
 
 ```bash
-cp k8s/mysql-secret.example.yaml k8s/mysql-secret.yaml   # then set real DB_USER / DB_PASSWORD
+cp k8s/mysql-secret.example.yaml k8s/mysql-secret.yaml   # then set real DB_USER / DB_PASSWORD; keep this file out of git
 kubectl apply -f k8s/mysql-secret.yaml
 kubectl get secret mysql-secret -n sample-app
 ```
