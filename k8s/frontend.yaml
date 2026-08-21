@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: sample-app
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      imagePullSecrets:
+        - name: default-secret
+      containers:
+        - name: frontend
+          image: swr.pk-isb-1.sky47.com/pk-beta-repo/sample-frontend:1.1.0
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: sample-app
+  annotations:
+    # Option A: bind an EXISTING shared ELB (get the ID from the sky47 ELB console)
+    kubernetes.io/elb.id: a168acbd-ad28-4c82-a57d-7229be2b7da8
+    kubernetes.io/elb.class: union
+    # Let CCE manage the ELB listener/backend for this Service
+    kubernetes.io/elb.autoset: "true"
+    # HTTPS listener on 443 — TLS terminates at the ELB, backend stays HTTP (nginx :80)
+    kubernetes.io/elb.protocol-port: "https:443"
+    # Certificate already uploaded to the ELB — its ID (ELB console → Certificates)
+    kubernetes.io/elb.cert-id: "fb0464e7b74948d6a3223f05eafbd311"
+    kubernetes.io/elb.tls-ciphers-policy: tls-1-2
+    # Option B: auto-create an ELB instead — delete elb.id above and uncomment:
+    # kubernetes.io/elb.autocreate: '{"type":"public","bandwidth_name":"sample-app-bw","bandwidth_chargemode":"traffic","bandwidth_size":5,"bandwidth_sharetype":"PER","eip_type":"5_bgp"}'
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 443
+      targetPort: 80

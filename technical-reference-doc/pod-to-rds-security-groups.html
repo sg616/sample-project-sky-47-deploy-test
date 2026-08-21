@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pod to RDS — Why Your Security Group Rule Didn't Match</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+  html,body{margin:0;padding:0;}
+  body{background:#5a5f66;}
+  .sheet{width:8.5in;min-height:11in;margin:24px auto;padding:0.7in;background:#fff;
+    box-shadow:0 2px 18px rgba(0,0,0,.35);box-sizing:border-box;}
+  @page{size:letter;margin:0.7in;}
+  @media print{
+    body{background:#fff;}
+    .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;}
+  }
+
+  doc-page:not(:defined){visibility:hidden}
+  :root{
+    --ink:#232F3E; --slate:#37475A; --orange:#FF9900; --orange-d:#EC7211;
+    --gray:#545B64; --gray-l:#879196; --paper:#FFFFFF; --wash:#FAFAFA;
+    --line:#E3E7EB; --pub:#1B9E77; --priv:#2D72B8; --blue:#2D72B8; --purple:#8B5CF6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#5a5f66;color:var(--ink);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  doc-page{font-size:11pt;line-height:1.6;color:#1c2430;}
+  .sheet{font-size:10.6pt;line-height:1.6;color:#1c2430;}
+  a{color:var(--orange-d);text-decoration:none;}
+  a:hover{text-decoration:underline;color:var(--orange);}
+  p{margin:0 0 10px;}
+  strong{font-weight:600;color:var(--ink);}
+  code{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:9.2pt;background:#EEF1F4;border:1px solid #E0E5EA;border-radius:4px;padding:1px 5px;color:#2a3542;}
+
+  .pg-foot{display:flex;justify-content:space-between;align-items:center;font-size:8pt;color:var(--gray-l);border-top:1px solid var(--line);padding-top:5px;letter-spacing:.02em;}
+  .pg-foot b{color:var(--orange-d);font-weight:700;}
+
+  .cover{background:var(--ink);color:#fff;margin:-0.7in -0.7in 26px;padding:66px 0.7in 48px;position:relative;overflow:hidden;}
+  .cover::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;background:var(--orange);}
+  .cover::before{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(255,153,0,.16),transparent 68%);}
+  .cover .eyebrow{font-size:11pt;letter-spacing:.22em;text-transform:uppercase;color:var(--orange);font-weight:600;margin-bottom:18px;}
+  .cover h1{font-size:31pt;line-height:1.08;margin:0 0 14px;font-weight:800;letter-spacing:-.015em;max-width:16em;}
+  .cover .sub{font-size:12.5pt;color:#c7ced6;max-width:36em;line-height:1.55;}
+  .cover .meta{margin-top:28px;display:flex;gap:30px;flex-wrap:wrap;font-size:9.5pt;color:#9aa5b1;}
+  .cover .meta b{color:#fff;font-weight:700;display:block;font-size:16pt;margin-bottom:2px;}
+
+  h2.sec{font-size:9.5pt;letter-spacing:.16em;text-transform:uppercase;color:var(--orange-d);font-weight:700;margin:0 0 4px;}
+  .p-h{font-size:16pt;font-weight:800;color:var(--ink);margin:0 0 6px;line-height:1.22;letter-spacing:-.01em;}
+  .p-h .num{color:var(--orange-d);}
+  .head-row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;}
+  .head-row a{font-size:9pt;white-space:nowrap;}
+
+  .part{break-before:page;background:var(--ink);color:#fff;margin:0 -0.7in 26px;padding:40px 0.7in;position:relative;overflow:hidden;}
+  .part::before{content:"";position:absolute;left:0;top:0;bottom:0;width:8px;background:var(--orange);}
+  .part::after{content:"";position:absolute;right:-90px;bottom:-90px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,153,0,.14),transparent 70%);}
+  .part .dk{font-size:10pt;letter-spacing:.2em;text-transform:uppercase;color:var(--orange);font-weight:600;}
+  .part h2{font-size:24pt;font-weight:800;margin:6px 0 6px;letter-spacing:-.01em;}
+  .part p{color:#b8c0c9;font-size:10.5pt;margin:0;max-width:46em;line-height:1.55;}
+
+  .toc h2{font-size:17pt;font-weight:800;color:var(--ink);margin:0 0 4px;}
+  .toc .lead{color:var(--gray);font-size:10.5pt;margin-bottom:20px;max-width:40em;}
+  .toc-grp{margin-bottom:15px;break-inside:avoid;}
+  .toc-grp .lbl{font-size:8.5pt;letter-spacing:.14em;text-transform:uppercase;color:var(--orange-d);font-weight:700;border-bottom:1.5px solid var(--line);padding-bottom:4px;margin-bottom:7px;}
+  .toc-row{display:flex;align-items:baseline;gap:8px;font-size:10pt;padding:2.5px 0;}
+  .toc-row .qn{color:var(--orange-d);font-weight:700;font-variant-numeric:tabular-nums;min-width:30px;}
+  .toc-row .dots{flex:1;border-bottom:1px dotted #c4ccd4;transform:translateY(-3px);}
+  .toc-row a{color:#26313f;}
+  .toc-row .badge{font-size:7pt;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--gray);background:#EDF0F3;border:1px solid var(--line);border-radius:3px;padding:1px 5px;}
+
+  .sub-lbl{display:flex;align-items:center;gap:9px;font-size:9pt;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--orange-d);margin:16px 0 9px;}
+  .sub-lbl::after{content:"";flex:1;height:1.5px;background:linear-gradient(90deg,var(--orange) 0%,var(--line) 100%);}
+  .sub-lbl .n{font-family:'JetBrains Mono',monospace;color:var(--gray-l);font-weight:600;font-size:8.5pt;}
+
+  .p{margin-bottom:26px;}
+  .lede{background:var(--wash);border:1px solid var(--line);border-left:4px solid var(--slate);border-radius:6px;padding:14px 18px;margin-bottom:6px;break-inside:avoid;}
+  .lede .tag{display:inline-block;font-size:8pt;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#fff;background:var(--slate);padding:2px 8px;border-radius:3px;margin-bottom:9px;}
+  .lede p{margin:0;font-size:10.5pt;color:#2a3542;}
+
+  .reqs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;break-inside:avoid;}
+  .reqs .col{border:1px solid var(--line);border-radius:6px;padding:10px 13px;background:#fff;}
+  .reqs .col h4{margin:0 0 6px;font-size:8.2pt;letter-spacing:.1em;text-transform:uppercase;color:var(--slate);font-weight:700;border-bottom:1px solid var(--line);padding-bottom:5px;}
+  .reqs ul{margin:0;padding-left:15px;font-size:9.5pt;color:#33404d;line-height:1.5;}
+  .reqs li{margin-bottom:4px;}
+  .reqs li::marker{color:var(--orange);}
+
+  .stats{display:flex;gap:9px;flex-wrap:wrap;margin:4px 0 6px;break-inside:avoid;}
+  .stat{flex:1;min-width:110px;border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:6px;padding:9px 12px;background:var(--wash);}
+  .stat .v{font-size:14.5pt;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1;}
+  .stat .v small{font-size:9pt;font-weight:600;color:var(--gray);}
+  .stat .k{font-size:8pt;letter-spacing:.05em;text-transform:uppercase;color:var(--gray);margin-top:4px;font-weight:600;}
+  .stat .n{font-size:8.4pt;color:var(--gray-l);margin-top:3px;line-height:1.35;}
+
+  .svc{margin:6px 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;}
+  .svc .r{display:flex;gap:0;border-top:1px solid var(--line);font-size:9.7pt;}
+  .svc .r:first-child{border-top:none;}
+  .svc .name{flex:0 0 30%;padding:9px 13px;font-weight:700;background:var(--wash);color:var(--ink);border-right:1px solid var(--line);display:flex;align-items:center;gap:7px;}
+  .svc .name .dot{width:8px;height:8px;border-radius:2px;flex:none;}
+  .svc .role{flex:1;padding:9px 13px;color:#3a4552;}
+  .svc .role b{color:var(--ink);}
+
+  .callout{border-radius:6px;padding:11px 14px 11px 40px;margin:12px 0;font-size:9.8pt;line-height:1.5;position:relative;break-inside:avoid;}
+  .callout .ct{font-weight:700;display:block;margin-bottom:2px;font-size:9pt;letter-spacing:.03em;}
+  .callout .ico{position:absolute;left:12px;top:12px;width:18px;height:18px;}
+  .callout.key{background:#F0F6FC;border:1px solid #CFE2F3;color:#1c3a52;}
+  .callout.key .ct{color:#1f6feb;}
+  .callout.tip{background:#FFF4E0;border:1px solid #FBD79A;color:#5a3d0a;}
+  .callout.tip .ct{color:var(--orange-d);}
+  .callout.warn{background:#FDECEC;border:1px solid #F5C2C2;color:#6b1d1d;}
+  .callout.warn .ct{color:#C0392B;}
+
+  .xref{font-size:9.5pt;color:var(--slate);background:#EEF1F4;border:1px dashed #C2CBD4;border-radius:5px;padding:8px 12px;margin:10px 0;display:flex;gap:8px;align-items:baseline;break-inside:avoid;}
+  .xref b{color:var(--orange-d);}
+  .xref::before{content:"→";color:var(--orange-d);font-weight:800;}
+
+  .why{margin:12px 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;break-inside:avoid;}
+  .why .row{display:flex;gap:0;border-top:1px solid var(--line);font-size:9.6pt;}
+  .why .row:first-child{border-top:none;}
+  .why .opt{flex:0 0 34%;padding:8px 12px;font-weight:600;background:var(--wash);color:var(--ink);border-right:1px solid var(--line);}
+  .why .rea{flex:1;padding:8px 12px;color:#3a4552;}
+  .why .opt.no::before{content:"\2717  ";color:#C0392B;font-weight:800;}
+  .why .opt.yes{background:#EAF7F1;}
+  .why .opt.yes::before{content:"\2713  ";color:#1B9E77;font-weight:800;}
+
+  .spine{border:1px solid var(--line);border-radius:7px;margin:16px 0 4px;overflow:hidden;break-inside:avoid;background:#fff;box-shadow:0 1px 2px rgba(35,47,62,.05);}
+  .spine .hd{display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;padding:8px 15px;font-size:8.6pt;letter-spacing:.14em;text-transform:uppercase;font-weight:700;}
+  .spine .hd svg{width:15px;height:15px;fill:var(--orange);flex:none;}
+  .spine .hd .clk{margin-left:auto;font-family:'JetBrains Mono',monospace;letter-spacing:.01em;font-weight:600;color:var(--orange);text-transform:none;font-size:8.6pt;}
+  .spine .bd{padding:11px 15px 13px;}
+  .spine .tl{margin-bottom:11px;}
+  .spine .ph{display:flex;gap:12px;padding:6px 0;border-top:1px dashed var(--line);}
+  .spine .ph:first-child{border-top:none;padding-top:0;}
+  .spine .ph .mn{flex:0 0 60px;font-size:7.8pt;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--orange-d);padding-top:2px;}
+  .spine .ph .tx{flex:1;font-size:9.6pt;color:#33404d;line-height:1.5;}
+  .spine .ph .tx b{color:var(--ink);font-weight:600;}
+  .spine .three{background:var(--wash);border:1px solid var(--line);border-radius:5px;padding:9px 13px;margin-bottom:9px;}
+  .spine .three .lb,.spine .flag .lb{font-size:7.6pt;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--slate);margin-bottom:5px;display:block;}
+  .spine .three ol{margin:0;padding-left:16px;font-size:9.4pt;color:#2a3542;line-height:1.5;}
+  .spine .three li{margin-bottom:2px;}
+  .spine .three li::marker{color:var(--orange-d);font-weight:700;}
+  .spine .flag{font-size:9.3pt;line-height:1.45;color:#6b1d1d;background:#FDECEC;border:1px solid #F5C2C2;border-radius:5px;padding:8px 12px;}
+  .spine .flag .lb{color:#C0392B;}
+  .spine .flag b{color:#8f2a20;font-weight:600;}
+
+  figure.dg{margin:16px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden;break-inside:avoid;background:#fff;}
+  figure.dg .cap{background:var(--wash);border-top:1px solid var(--line);padding:7px 14px;font-size:8.8pt;color:var(--gray);}
+  figure.dg .cap b{color:var(--orange-d);font-weight:700;}
+  figure.dg svg{display:block;width:100%;height:auto;}
+
+  .d-bg{fill:#fff;}
+  .vpc{fill:#F5F8FB;stroke:#2D72B8;stroke-width:1.5;stroke-dasharray:6 4;}
+  .region{fill:none;stroke:#545B64;stroke-width:1.4;stroke-dasharray:2 3;}
+  .az{fill:#FBFDFF;stroke:#879196;stroke-width:1;stroke-dasharray:4 3;}
+  .zbox{fill:#FAFBFC;stroke:#C7D0D8;stroke-width:1;stroke-dasharray:4 3;}
+  .sub-pub{fill:#EAF7F1;stroke:#1B9E77;stroke-width:1;stroke-dasharray:4 3;}
+  .sub-priv{fill:#EEF4FB;stroke:#2D72B8;stroke-width:1;stroke-dasharray:4 3;}
+  .tile{fill:#232F3E;}
+  .tile-o{fill:#FF9900;}
+  .tile-b{fill:#2D72B8;}
+  .tile-g{fill:#545B64;}
+  .tile-p{fill:#8B5CF6;}
+  .tile-grn{fill:#1B9E77;}
+  .tile-w{fill:#fff;stroke:#232F3E;stroke-width:1.3;}
+  .t-lbl{font:600 11px 'Inter',sans-serif;fill:#fff;text-anchor:middle;}
+  .t-lbli{font:600 11px 'Inter',sans-serif;fill:#232F3E;text-anchor:middle;}
+  .t-sub{font:500 8.5px 'Inter',sans-serif;fill:#fff;opacity:.8;text-anchor:middle;}
+  .t-subd{font:500 8.5px 'Inter',sans-serif;fill:#545B64;text-anchor:middle;}
+  .zone-lbl{font:700 9px 'Inter',sans-serif;letter-spacing:.07em;}
+  .flow{font:500 8.5px 'Inter',sans-serif;fill:#545B64;}
+  .flow-a{font:500 8.5px 'Inter',sans-serif;fill:#8B5CF6;}
+  .flow-o{font:600 8.5px 'Inter',sans-serif;fill:#EC7211;}
+  .ln{stroke:#545B64;stroke-width:1.6;fill:none;}
+  .ln-o{stroke:#FF9900;stroke-width:2;fill:none;}
+  .ln-async{stroke:#8B5CF6;stroke-width:1.6;fill:none;stroke-dasharray:6 4;}
+  .ln-x{stroke:#C0392B;stroke-width:2;fill:none;stroke-dasharray:3 3;}
+  .legend-sw{width:22px;height:0;}
+
+  .method{counter-reset:step;margin:6px 0;}
+  .method .step{display:flex;gap:13px;padding:10px 0;border-top:1px solid var(--line);break-inside:avoid;}
+  .method .step:first-child{border-top:none;}
+  .method .step .idx{flex:none;width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--orange);font-weight:800;font-size:11pt;display:flex;align-items:center;justify-content:center;}
+  .method .step .bd{flex:1;}
+  .method .step h4{margin:2px 0 3px;font-size:11pt;color:var(--ink);font-weight:700;}
+  .method .step p{margin:0;font-size:9.8pt;color:#3a4552;}
+
+  .blocks{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:8px 0;}
+  .block{border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:#fff;break-inside:avoid;}
+  .block h4{margin:0 0 7px;font-size:8.4pt;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#fff;display:inline-block;padding:2px 8px;border-radius:3px;}
+  .block .items{font-size:9.4pt;color:#33404d;line-height:1.55;}
+  .block .items b{color:var(--ink);}
+
+  .legend{display:flex;flex-wrap:wrap;gap:16px 26px;background:var(--wash);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:8px 0;font-size:9.4pt;}
+  .legend .grp{min-width:150px;}
+  .legend .grp .h{font-size:8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:7px;}
+  .legend .it{display:flex;align-items:center;gap:9px;margin-bottom:6px;color:#33404d;}
+  .legend .chip{width:26px;height:15px;border-radius:3px;flex:none;}
+  .legend svg{flex:none;}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#545B64"/></marker>
+  <marker id="arrow-o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#FF9900"/></marker>
+  <marker id="arrow-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8B5CF6"/></marker>
+</defs></svg>
+
+<div class="sheet">
+
+  <!-- ================= COVER ================= -->
+  <div class="cover">
+    <div class="eyebrow">Deep Dive · Networking</div>
+    <h1>Pod to RDS: Why Your Security Group Rule Didn't Match</h1>
+    <div class="sub">You allowed the node subnet — and the database still timed out. The missing piece is understanding <em>whose IP</em> the packet actually carries when a Kubernetes pod talks to a managed database. A field-guide based on a real CCE + RDS incident.</div>
+    <div class="meta">
+      <div><b>6</b>Entries</div>
+      <div><b>2</b>Parts</div>
+      <div><b>1</b>Method</div>
+      <div><b>2</b>Diagrams</div>
+    </div>
+  </div>
+
+  <p>This reference explains the full chain of concepts behind the classic problem: <em>a pod in a Kubernetes cluster can't reach a database, even though the subnet is allowed in the security group</em>. It covers what the error signatures mean, the two fundamental cluster network models (overlay with SNAT vs. ENI/VPC-native), how security groups actually evaluate packets, and a repeatable method for diagnosing and fixing the problem. Written from a real incident — Spring Boot on CCE, HikariCP failing to connect to MySQL 5.7 with <code>connect timed out</code> — and the concepts generalize to AWS EKS, Azure AKS and any cloud.</p>
+
+  <div class="callout tip"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#EC7211" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".5" fill="#EC7211"/></svg><span class="ct">How to use this</span>
+  If you are mid-incident, jump to <a href="#method">the method</a> and then to entry <a href="#e1">01</a> to read your exact error signature. The model chapters (<a href="#e2">02</a>–<a href="#e3">03</a>) explain why the fix works; entry <a href="#e5">05</a> gives the decision matrix for what CIDR to allow.</div>
+
+  <!-- ================= TOC ================= -->
+  <div class="toc" id="toc">
+    <h2>Contents</h2>
+    <div class="lead">Six entries, ordered the way a real diagnosis proceeds: read the error first, then the network model, then the rule engine, then decide, then verify.</div>
+
+    <div class="toc-grp">
+      <div class="lbl">Part I — Diagnose</div>
+      <div class="toc-row"><span class="qn">01</span><a href="#e1">Reading failure signatures: timeout ≠ access denied</a><span class="dots"></span><span class="badge">triage</span></div>
+    </div>
+
+    <div class="toc-grp">
+      <div class="lbl">Part II — The two network models</div>
+      <div class="toc-row"><span class="qn">02</span><a href="#e2">Overlay / VPC-network clusters: pods hide behind the node (SNAT)</a><span class="dots"></span></div>
+      <div class="toc-row"><span class="qn">03</span><a href="#e3">CCE Turbo / ENI clusters: the pod is a first-class VPC citizen</a><span class="dots"></span><span class="badge">real incident</span></div>
+      <div class="toc-row"><span class="qn">04</span><a href="#e4">How security groups actually evaluate a packet</a><span class="dots"></span></div>
+      <div class="toc-row"><span class="qn">05</span><a href="#e5">Decision matrix: what to allow on the DB</a><span class="dots"></span></div>
+      <div class="toc-row"><span class="qn">06</span><a href="#e6">Verifying connectivity from inside the cluster</a><span class="dots"></span></div>
+    </div>
+  </div>
+
+  <!-- ================= METHOD CHAPTER ================= -->
+  <div class="part">
+    <div class="dk">The Method</div>
+    <h2>Five Steps to Any Pod→Service Connection Failure</h2>
+    <p>The same procedure works whether the target is RDS, Redis, Kafka or another VPC service. Run the steps in order — most incidents are solved at step 1 or 3.</p>
+  </div>
+
+  <div class="method" id="method">
+    <div class="step"><div class="idx">1</div><div class="bd"><h4>Read the signature, don't guess</h4><p>The exception text tells you which layer failed. <code>connect timed out</code> → packets dropped (SG / routing). <code>Connection refused</code> → host reachable, port closed. <code>Access denied</code> → TCP works, auth failed. <code>UnknownHostException</code> → DNS, not network. See entry <a href="#e1">01</a>.</p></div></div>
+    <div class="step"><div class="idx">2</div><div class="bd"><h4>Establish the network model</h4><p>Find out how the cluster gives pods their addresses: overlay (pod IPs live in a private container network) or ENI/VPC-native (pod IPs are real VPC addresses). This decides whose IP your traffic carries — the node's or the pod's. See entries <a href="#e2">02</a> and <a href="#e3">03</a>.</p></div></div>
+    <div class="step"><div class="idx">3</div><div class="bd"><h4>Trace the packet's source IP</h4><p>Ask: <em>what source IP does the destination see?</em> Overlay cluster leaving the cluster → node IP after SNAT. Turbo/ENI cluster → the pod IP itself. The SG rule must match <strong>that</strong> IP, not whichever one you first thought of.</p></div></div>
+    <div class="step"><div class="idx">4</div><div class="bd"><h4>Allow both CIDRs while you learn</h4><p>Add inbound rules for the node subnet <em>and</em> the container CIDR. They are cheap, they are harmless, and together they cover both models — so a wrong guess about step 2 can't keep you stuck. See entry <a href="#e5">05</a>.</p></div></div>
+    <div class="step"><div class="idx">5</div><div class="bd"><h4>Prove it with a real TCP probe</h4><p>Run <code>nc -zv</code> from a disposable pod in the cluster, not from your laptop. Green = fixed; restart the workload to recover. See entry <a href="#e6">06</a>.</p></div></div>
+  </div>
+
+  <div class="sub-lbl">The vocabulary <span class="n">shared terms</span></div>
+  <div class="blocks">
+    <div class="block"><h4 style="background:var(--slate)">Pod CIDR / Container CIDR</h4><div class="items">The IP range Kubernetes assigns to pods, e.g. <b>172.16.0.0/16</b>. Set at cluster creation (<code>Container CIDR Block</code> in CCE console, <code>--cluster-cidr</code> / EKS <i>CNI custom networking</i> equivalent). Visible via <code>kubectl get pods -o wide</code>.</div></div>
+    <div class="block"><h4 style="background:var(--blue)">Node / Subnet CIDR</h4><div class="items">The VPC subnet range the cluster <b>worker nodes</b> live in, e.g. <b>10.10.1.0/24</b>. This is the address range external services see in overlay clusters after SNAT.</div></div>
+    <div class="block"><h4 style="background:var(--orange-d)">SNAT (Source NAT)</h4><div class="items">Rewriting a packet's <b>source IP</b> as it leaves the node — the pod's private overlay address is replaced by the node's VPC address so the outside world can route replies back.</div></div>
+    <div class="block"><h4 style="background:var(--purple)">ENI (Elastic Network Interface)</h4><div class="items">A virtual NIC attached to a VM. In Turbo/ENI clusters each pod gets one (or a shared one), making the pod IP <b>routable inside the VPC</b> — no SNAT needed on the way out.</div></div>
+  </div>
+
+  <div class="legend">
+    <div class="grp"><div class="h">Diagram tiles</div>
+      <div class="it"><span class="chip" style="background:#232F3E"></span>Cluster / workload component</div>
+      <div class="it"><span class="chip" style="background:#2D72B8"></span>VPC infrastructure (subnets, SG)</div>
+      <div class="it"><span class="chip" style="background:#FF9900"></span>Managed service (RDS)</div>
+      <div class="it"><span class="chip" style="background:#8B5CF6"></span>Packet transformation (SNAT)</div>
+    </div>
+    <div class="grp"><div class="h">Diagram lines</div>
+      <div class="it"><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" class="ln-o" marker-end="url(#arrow-o)"/></svg>Packet path being analyzed</div>
+      <div class="it"><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" class="ln" marker-end="url(#arrow)"/></svg>Regular traffic</div>
+      <div class="it"><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" class="ln-x"/></svg>Dropped by security group</div>
+    </div>
+    <div class="grp"><div class="h">Frames</div>
+      <div class="it"><svg width="34" height="16"><rect x="1" y="1" width="32" height="14" class="vpc"/></svg>VPC</div>
+      <div class="it"><svg width="34" height="16"><rect x="1" y="1" width="32" height="14" class="sub-pub"/></svg>Node subnet</div>
+      <div class="it"><svg width="34" height="16"><rect x="1" y="1" width="32" height="14" class="zbox"/></svg>Overlay container network</div>
+    </div>
+  </div>
+
+  <!-- ================= PART I ================= -->
+  <div class="part">
+    <div class="dk">Part I · Diagnose</div>
+    <h2>Read the Error Before You Touch a Rule</h2>
+    <p>Ninety percent of wasted debugging comes from fixing the wrong layer. The exception text names the layer.</p>
+  </div>
+
+  <!-- E1 -->
+  <div class="p" id="e1">
+    <div class="head-row"><h2 class="sec">Diagnose · failure signatures</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">01.</span> Reading failure signatures: timeout ≠ access denied</div>
+    <div class="lede"><span class="tag">The one idea</span><p>Every layer of the stack fails with its own unmistakable signature. <code>connect timed out</code> means your packet vanished on the way — a security group or routing problem — and <strong>no amount of credential or schema fixing will help</strong> until packets get through.</p></div>
+
+    <div class="sub-lbl">The real log line <span class="n">from the incident</span></div>
+    <div class="stats">
+      <div class="stat"><div class="v">5<small> s</small></div><div class="k">Hikari connect-timeout</div><div class="n">configured 5000 ms — pool init gave up after one attempt window</div></div>
+      <div class="stat"><div class="v">3306</div><div class="k">MySQL port</div><div class="n">TCP handshake never completed</div></div>
+      <div class="stat"><div class="v">172.16.0.126</div><div class="k">Pod IP</div><div class="n">source of the failing connection</div></div>
+      <div class="stat"><div class="v">10.10.1.156</div><div class="k">Node IP</div><div class="n">what the DB saw — <em>if</em> SNAT applied</div></div>
+    </div>
+
+    <div class="sub-lbl">The signature table</div>
+    <div class="svc">
+      <div class="r"><div class="name"><span class="dot" style="background:#C0392B"></span>connect timed out</div><div class="role">SYN sent, <b>no reply at all</b> (or a silent drop). The firewall/security group dropped the packet, or there is no route. <b>Why this matters:</b> it is the one signature that is never about the application — fix the network first.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#EC7211"></span>Connection refused</div><div class="role">The host <b>answered with an RST</b>. Packets flow; the port is closed or the DB isn't listening on that port/interface. Network is fine.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#8B5CF6"></span>Access denied for user</div><div class="role">Full TCP handshake + MySQL protocol exchange succeeded; <b>authentication failed</b>. Wrong user/password, or the DB user is host-restricted.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#2D72B8"></span>UnknownHostException</div><div class="role">DNS lookup failed before any packet was sent. Hostname wrong, or CoreDNS/VPC DNS not resolving it.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#1B9E77"></span>Communications link failure</div><div class="role">JDBC's umbrella message — always read the <code>Caused by:</code> line; that's where the real signature lives.</div></div>
+    </div>
+
+    <div class="callout warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#C0392B" stroke-width="2"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".5" fill="#C0392B"/></svg><span class="ct">Gotcha</span>
+    Don't read only the top line. In the incident the top of the stack said <code>CommunicationsException</code> — which sounds like "any network problem" — while the true cause, <code>java.net.SocketTimeoutException: connect timed out</code>, sat three <code>Caused by</code> levels down.</div>
+
+    <div class="spine"><div class="hd"><svg viewBox="0 0 24 24"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>In practice<span class="clk">~2 min</span></div><div class="bd">
+      <div class="tl">
+        <div class="ph"><div class="mn">Frame</div><div class="tx">Pull the pod logs and find the <b>deepest</b> <code>Caused by:</code> — that is the layer that failed.</div></div>
+        <div class="ph"><div class="mn">Go deep</div><div class="tx">Map it against the signature table: timeout → <b>packets dropped</b> (SG/route), refused → port, denied → auth, unknown host → DNS.</div></div>
+        <div class="ph"><div class="mn">Land it</div><div class="tx">Say the verdict before touching anything: "this is a dropped-packet problem, so we fix the security group, not the credentials."</div></div>
+      </div>
+      <div class="three"><span class="lb">Do these three things</span><ol>
+        <li><code>kubectl logs deploy/backend -n sample-app</code> — read to the last <code>Caused by</code>.</li>
+        <li>Note the <b>pod IP</b> and the <b>node IP</b> — you'll need both in entry <a href="#e3">03</a>.</li>
+        <li>If it's a timeout, skip everything credential-related and jump to the network model.</li>
+      </ol></div>
+      <div class="flag"><span class="lb">Red flag — don't</span><b>Don't</b> rotate DB passwords or recreate the user when the signature is a timeout. The TCP handshake never finished — the DB never saw your credentials at all.</div>
+    </div></div>
+  </div>
+
+  <!-- ================= PART II ================= -->
+  <div class="part">
+    <div class="dk">Part II · The Two Network Models</div>
+    <h2>Whose IP Does the Database See?</h2>
+    <p>The whole article turns on one question. Two architectures give two different answers — and two different security-group rules.</p>
+  </div>
+
+  <!-- E2 -->
+  <div class="p" id="e2">
+    <div class="head-row"><h2 class="sec">Model A · overlay</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">02.</span> Overlay / VPC-network clusters: pods hide behind the node</div>
+    <div class="lede"><span class="tag">The one idea</span><p>In the classic model, pod IPs are <em>private to the cluster</em>. When a pod talks to anything outside the cluster, the node performs <strong>SNAT</strong> and the outside world sees the <strong>node's</strong> IP — so the DB security group must allow the <strong>node subnet</strong>.</p></div>
+
+    <div class="sub-lbl">How the model works</div>
+    <div class="reqs">
+      <div class="col"><h4>Addressing</h4><ul><li>Pods get IPs from the container CIDR (172.16.x.x)</li><li>VPC routers know nothing about that range</li><li>Only nodes can route to pod IPs</li></ul></div>
+      <div class="col"><h4>Leaving the cluster</h4><ul><li>Pod → external target hits the node's <code>POSTROUTING</code> chain</li><li>masquerade rewrites source to the node IP</li><li>Replies come back to the node, get de-NATed to the pod</li></ul></div>
+      <div class="col"><h4>Implication for SGs</h4><ul><li>RDS sees <code>src = node IP</code></li><li>Rule must allow the <b>node subnet CIDR</b></li><li>Pod-CIDR rule alone matches nothing here</li></ul></div>
+    </div>
+
+    <figure class="dg">
+      <svg viewBox="0 0 680 300">
+        <rect x="0" y="0" width="680" height="300" class="d-bg"/>
+        <rect x="16" y="34" width="400" height="240" class="vpc"/>
+        <text x="30" y="54" class="zone-lbl" fill="#2D72B8">VPC</text>
+        <rect x="36" y="70" width="360" height="180" class="sub-pub"/>
+        <text x="48" y="88" class="zone-lbl" fill="#1B9E77">NODE SUBNET 10.10.1.0/24</text>
+        <rect x="56" y="100" width="320" height="130" class="zbox"/>
+        <text x="68" y="117" class="zone-lbl" fill="#545B64">OVERLAY CONTAINER NETWORK (172.16.0.0/16)</text>
+        <rect x="76" y="128" width="120" height="46" class="tile" rx="5"/>
+        <text x="136" y="147" class="t-lbl">backend pod</text>
+        <text x="136" y="162" class="t-sub">172.16.0.126</text>
+        <rect x="76" y="186" width="120" height="32" class="tile-p" rx="5"/>
+        <text x="136" y="206" class="t-lbl">SNAT @ node</text>
+        <path class="ln" d="M136 174 L136 186" marker-end="url(#arrow)"/>
+        <rect x="250" y="128" width="110" height="46" class="tile-b" rx="5"/>
+        <text x="305" y="147" class="t-lbl">worker node</text>
+        <text x="305" y="162" class="t-sub">10.10.1.156</text>
+        <rect x="480" y="110" width="170" height="60" class="tile-o" rx="6"/>
+        <text x="565" y="134" class="t-lbl">RDS MySQL</text>
+        <text x="565" y="150" class="t-sub">:3306 · SG checks source IP</text>
+        <path class="ln-o" d="M196 202 C 320 202 380 170 470 145" marker-end="url(#arrow-o)"/>
+        <text x="300" y="230" class="flow">src rewritten: 172.16.0.126 → 10.10.1.156</text>
+        <text x="300" y="244" class="flow-o">SG needs: ALLOW tcp/3306 from 10.10.1.0/24</text>
+      </svg>
+      <div class="cap"><b>Fig 02</b> — Overlay model: the pod's traffic leaves through the node, which masquerades it. RDS sees the node IP, so the node-subnet rule is what must match.</div>
+    </figure>
+
+    <div class="callout key"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1f6feb" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-5"/></svg><span class="ct">Key concept — SNAT is what makes pod→outside-VPC possible</span>
+    Without SNAT, the RDS instance would receive packets from <code>172.16.0.126</code> — an address it has no route to — and could never reply. Masquerading is the bridge between the cluster-private overlay and the VPC. Same mechanism, everywhere: AWS EKS with standard CNI and <code>AWS_VPC_K8S_CNI_EXTERNALSNAT=false</code>, AKS kubenet, vanilla flannel/calico clusters.</div>
+  </div>
+
+  <!-- E3 -->
+  <div class="p" id="e3">
+    <div class="head-row"><h2 class="sec">Model B · ENI / Turbo</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">03.</span> CCE Turbo / ENI clusters: the pod is a first-class VPC citizen</div>
+    <div class="lede"><span class="tag">The one idea</span><p>In ENI-based clusters (CCE Turbo; the EKS equivalent is giving pods their own security-group-bearing ENIs via a CNI plugin), each pod's IP is a <strong>real, routable VPC address</strong>. There is <strong>no SNAT</strong> on the way out — the database sees the <strong>pod's own IP</strong>, so the node-subnet rule alone never matches.</p></div>
+
+    <div class="sub-lbl">Why "I allowed the subnet but it still times out" happens</div>
+    <div class="stats">
+      <div class="stat"><div class="v">0<small> rules matched</small></div><div class="k">Node-subnet rule</div><div class="n">src 172.16.0.126 ∉ 10.10.1.0/24 — rule never fires</div></div>
+      <div class="stat"><div class="v">1<small> rule needed</small></div><div class="k">Pod-CIDR rule</div><div class="n">ALLOW tcp/3306 from 172.16.0.0/16 fixed the incident</div></div>
+      <div class="stat"><div class="v">172.16<small>.0.0/16</small></div><div class="k">Container CIDR</div><div class="n">shown on cluster Basic Information, or infer from any pod IP</div></div>
+    </div>
+
+    <figure class="dg">
+      <svg viewBox="0 0 680 300">
+        <rect x="0" y="0" width="680" height="300" class="d-bg"/>
+        <rect x="16" y="34" width="640" height="240" class="vpc"/>
+        <text x="30" y="54" class="zone-lbl" fill="#2D72B8">VPC — POD IPs ARE ROUTABLE HERE</text>
+        <rect x="36" y="70" width="250" height="180" class="sub-priv"/>
+        <text x="48" y="88" class="zone-lbl" fill="#2D72B8">NODE SUBNET 10.10.1.0/24</text>
+        <rect x="56" y="102" width="210" height="46" class="tile-b" rx="5"/>
+        <text x="161" y="121" class="t-lbl">worker node</text>
+        <text x="161" y="136" class="t-sub">10.10.1.156 (control plane only)</text>
+        <rect x="56" y="164" width="210" height="58" class="tile" rx="5"/>
+        <text x="161" y="184" class="t-lbl">backend pod</text>
+        <text x="161" y="199" class="t-sub">ENI-attached · 172.16.0.126</text>
+        <text x="161" y="212" class="t-sub">no SNAT — src stays the pod IP</text>
+        <rect x="420" y="110" width="210" height="60" class="tile-o" rx="6"/>
+        <text x="525" y="134" class="t-lbl">RDS MySQL</text>
+        <text x="525" y="150" class="t-sub">sees src = 172.16.0.126</text>
+        <path class="ln-o" d="M266 193 C 340 193 360 165 415 152" marker-end="url(#arrow-o)"/>
+        <text x="290" y="238" class="flow-o">SG needs: ALLOW tcp/3306 from 172.16.0.0/16</text>
+        <text x="290" y="252" class="flow">node-subnet rule exists but matches nothing</text>
+      </svg>
+      <div class="cap"><b>Fig 03</b> — ENI/Turbo model: the pod connects directly with its own VPC-routable IP. This is exactly what happened in the incident — adding the pod CIDR rule is what opened the connection.</div>
+    </figure>
+
+    <div class="sub-lbl">Trade-offs</div>
+    <div class="why">
+      <div class="row"><div class="opt yes">ENI / Turbo</div><div class="rea">Pods are first-class VPC citizens: routable, per-pod security groups possible, no tunnel overhead. <b>Cost:</b> SGs/ACLs must be pod-CIDR-aware; ENI quota per node caps pod density.</div></div>
+      <div class="row"><div class="opt no">Assuming overlay everywhere</div><div class="rea">The reflex "allow the node subnet" silently does nothing on ENI clusters — you get the same timeout and burn hours wondering why the rule "doesn't work".</div></div>
+    </div>
+
+    <div class="callout tip"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#EC7211" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".5" fill="#EC7211"/></svg><span class="ct">Note — which one do you have?</span>
+    Cluster console → <b>Basic Information → Networking</b> shows the network model (CCE: "VPC network" vs "Cloud Native 2.0/Turbo") and the Container CIDR Block. Quick test: if <code>kubectl get pods -o wide</code> shows pod IPs in a range that the console lists as a VPC subnet, you're on ENI.</div>
+  </div>
+
+  <!-- E4 -->
+  <div class="p" id="e4">
+    <div class="head-row"><h2 class="sec">The rule engine</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">04.</span> How security groups actually evaluate a packet</div>
+    <div class="lede"><span class="tag">The one idea</span><p>A security group is a <strong>stateful</strong> matcher on the connection's <strong>5-tuple</strong> — and it matches on what it <em>observes on the wire</em>, not on what you intended. If the observed source IP isn't in any ALLOW rule, the packet is silently dropped: no error, no reply, hence <code>connect timed out</code>.</p></div>
+
+    <div class="sub-lbl">What the matcher sees</div>
+    <div class="svc">
+      <div class="r"><div class="name"><span class="dot" style="background:#2D72B8"></span>5-tuple match</div><div class="role">Source IP, destination IP, protocol, source port, destination port. Your rule "TCP 3306 from 10.10.1.0/24" only fires if <b>all five</b> line up — in the incident, the source IP didn't.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#1B9E77"></span>Stateful</div><div class="role">Once a connection is <b>allowed out or in</b>, return traffic is allowed automatically. You never need a matching egress rule for the DB's replies — only for the initial SYN.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#EC7211"></span>Default deny</div><div class="role">No matching allow rule = drop. Drops produce no ICMP — the client retransmits the SYN until its connect timeout expires. That silence is exactly the <code>SocketTimeoutException</code> signature.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#8B5CF6"></span>Attachment point</div><div class="role">The SG is attached to the <b>DB instance's interface</b> (or its ENIs). Every packet is evaluated at arrival, against whatever source IP survives SNAT — which is the whole point of entries <a href="#e2">02</a>/<a href="#e3">03</a>.</div></div>
+    </div>
+
+    <div class="callout key"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1f6feb" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-5"/></svg><span class="ct">Key concept — drop vs. refuse</span>
+    A security group <em>drops</em> (silence → timeout). An application or host firewall like iptables can <em>refuse</em> (RST → connection refused). Two different failure signatures from "the port is blocked" — entry <a href="#e1">01</a> tells them apart.</div>
+  </div>
+
+  <!-- E5 -->
+  <div class="p" id="e5">
+    <div class="head-row"><h2 class="sec">Decision · what to allow</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">05.</span> Decision matrix: what CIDR to allow on the DB</div>
+    <div class="lede"><span class="tag">The one idea</span><p>You rarely need to know the exact network model to get unblocked: <strong>allow both the node subnet and the pod CIDR</strong>, tighten later. Each rule covers one model; together they cover both — and each rule only permits TCP/3306, nothing else.</p></div>
+
+    <div class="sub-lbl">The options</div>
+    <div class="why">
+      <div class="row"><div class="opt no">Node subnet only</div><div class="rea">Matches overlay clusters; matches <b>nothing</b> on ENI clusters — the exact failure from the incident.</div></div>
+      <div class="row"><div class="opt no">Pod CIDR only</div><div class="rea">Matches ENI clusters; on overlay clusters the DB never sees pod IPs (SNAT), so this also fails — just mirrored.</div></div>
+      <div class="row"><div class="opt no">0.0.0.0/0</div><div class="rea">Always "works" and is a fine 5-minute diagnostic. Leaving it in place exposes the DB port to the whole internet/VPC. Never the final state for a database.</div></div>
+      <div class="row"><div class="opt yes">Node subnet + pod CIDR</div><div class="rea">Two narrow inbound rules for TCP/3306. Covers both network models, survives a model you misidentified, and stays least-privilege. This is the recommended end state.</div></div>
+    </div>
+
+    <div class="sub-lbl">Concrete rules — the incident's fix</div>
+    <div class="reqs">
+      <div class="col"><h4>Rule 1 — nodes</h4><ul><li>TCP, port 3306</li><li>Source 10.10.1.0/24</li><li>= worker node subnet</li></ul></div>
+      <div class="col"><h4>Rule 2 — pods</h4><ul><li>TCP, port 3306</li><li>Source 172.16.0.0/16</li><li>= container CIDR — the fix</li></ul></div>
+      <div class="col"><h4>Find the pod CIDR</h4><ul><li>Console: cluster Basic Info → Container CIDR Block</li><li><code>kubectl get pods -o wide</code> — infer the range</li><li><code>kubectl cluster-info dump | grep -i cluster-cidr</code></li></ul></div>
+    </div>
+
+    <div class="callout warn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#C0392B" stroke-width="2"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/><circle cx="12" cy="18" r=".5" fill="#C0392B"/></svg><span class="ct">Gotcha — same VPC is still required</span>
+    Correct CIDRs don't help across VPCs. If the DB and the cluster live in different VPCs with no peering, packets have no route and you get the same <code>connect timed out</code>. Check VPC membership <em>before</em> tuning rules.</div>
+  </div>
+
+  <!-- E6 -->
+  <div class="p" id="e6">
+    <div class="head-row"><h2 class="sec">Verify · prove it</h2><a href="#toc">↑ Contents</a></div>
+    <div class="p-h"><span class="num">06.</span> Verifying connectivity from inside the cluster</div>
+    <div class="lede"><span class="tag">The one idea</span><p>Test from <strong>inside the cluster</strong>, not from your laptop — your laptop takes a completely different network path. One disposable pod doing a raw TCP connect is the ground truth for whether the SG/route problem is fixed.</p></div>
+
+    <div class="sub-lbl">The probe</div>
+    <div class="svc">
+      <div class="r"><div class="name"><span class="dot" style="background:#1B9E77"></span>nc probe pod</div><div class="role"><code>kubectl run nettest --rm -it --image=busybox -n sample-app --restart=Never -- nc -zv -w 3 &lt;DB_HOST&gt; 3306</code> — <code>open</code> means the packet path works end-to-end.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#EC7211"></span>timed out result</div><div class="role">Still dropped — re-check the CIDRs (entry <a href="#e5">05</a>), the VPC membership, and that you edited the security group attached to the <b>DB</b>, not the cluster nodes.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#C0392B"></span>refused result</div><div class="role">Network is fixed; the port isn't listening — wrong host/port, or the DB listens on a different interface. Progress, different problem.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#2D72B8"></span>Recover the app</div><div class="role"><code>kubectl rollout restart deploy/backend -n sample-app</code> — a fresh HikariCP pool initialization now succeeds; confirm with <code>GET /api/info → "database":{"status":"UP"}</code>.</div></div>
+    </div>
+
+    <div class="spine"><div class="hd"><svg viewBox="0 0 24 24"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>In practice<span class="clk">~3 min</span></div><div class="bd">
+      <div class="tl">
+        <div class="ph"><div class="mn">Frame</div><div class="tx">The probe pod must run in the <b>same namespace/VPC path</b> as the workload — testing from your laptop proves nothing.</div></div>
+        <div class="ph"><div class="mn">Go deep</div><div class="tx"><b>open</b> → fix confirmed; <b>timed out</b> → still a drop (back to entry <a href="#e5">05</a>); <b>refused</b> → network fixed, port problem.</div></div>
+        <div class="ph"><div class="mn">Land it</div><div class="tx">Restart the deployment so the connection pool re-initializes, then hit <code>/api/info</code> and see <b>"status":"UP"</b> with the MySQL version reported.</div></div>
+      </div>
+      <div class="three"><span class="lb">Do these three things</span><ol>
+        <li>Run the <code>nc</code> probe pod; <code>--rm</code> cleans it up automatically.</li>
+        <li><code>kubectl rollout restart deploy/backend -n sample-app</code> and wait for Ready.</li>
+        <li><code>curl http://&lt;EXTERNAL-IP&gt;/api/info</code> — expect <code>"database":{"status":"UP","product":"MySQL","version":"5.7.44"}</code>.</li>
+      </ol></div>
+      <div class="flag"><span class="lb">Red flag — don't</span><b>Don't</b> declare victory from the probe alone. The probe pod may schedule on a node whose path differs from the app's; the real proof is the application's own health endpoint reporting UP.</div>
+    </div></div>
+
+    <div class="sub-lbl">Closing recap — cross-reference</div>
+    <div class="svc">
+      <div class="r"><div class="name"><span class="dot" style="background:#232F3E"></span>01 → 02/03</div><div class="role">Timeout signature means dropped packets → identify the network model to know whose IP the DB sees.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#232F3E"></span>02 + 03 → 04</div><div class="role">The model decides the source IP; the SG matches only on what's on the wire. Node IP (SNAT) or pod IP (ENI) — never both.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#232F3E"></span>04 → 05</div><div class="role">Since drops are silent and the model is often unknown, allow both CIDRs — two narrow TCP/3306 rules cover both models.</div></div>
+      <div class="r"><div class="name"><span class="dot" style="background:#232F3E"></span>05 → 06</div><div class="role">Verify with an in-cluster TCP probe, restart the workload, and read the application's own DB-status endpoint.</div></div>
+    </div>
+  </div>
+
+  <div class="pg-foot"><span>POD → RDS · SECURITY GROUPS DEEP DIVE</span><b>sky47 · CCE + RDS incident write-up</b><span>2026-08-21</span></div>
+
+</div>
+</body>
+</html>

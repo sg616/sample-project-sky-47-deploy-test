@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: sample-app
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      imagePullSecrets:
+        - name: default-secret
+      containers:
+        - name: backend
+          image: swr.pk-isb-1.sky47.com/pk-beta-repo/sample-backend:1.1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: sky47
+            # Point DB_HOST at the RDS for MySQL instance address (see K8S-DEPLOYMENT.md)
+            - name: DB_HOST
+              value: 10.10.1.20
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: sampleapp
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: DB_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Must stay "backend" — frontend nginx proxies /api/ to http://backend:8080
+  name: backend
+  namespace: sample-app
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 8080
+      targetPort: 8080
