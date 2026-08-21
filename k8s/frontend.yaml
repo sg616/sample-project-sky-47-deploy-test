@@ -19,7 +19,7 @@ spec:
         - name: default-secret
       containers:
         - name: frontend
-          image: swr.pk-isb-1.sky47.com/pk-beta-repo/sample-frontend:1.0.0
+          image: swr.pk-isb-1.sky47.com/pk-beta-repo/sample-frontend:1.1.0
           ports:
             - containerPort: 80
           readinessProbe:
