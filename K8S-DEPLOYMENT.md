@@ -123,13 +123,14 @@ The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to
 
 | Placeholder | Where | Value |
 |---|---|---|
-| `<rds-mysql-instance-address>` | `k8s/backend.yaml` (`DB_HOST` env) | Internal address/IP of the RDS instance from step 6 |
+| `DB_HOST` | `k8s/db-config.yaml` (ConfigMap shared by both backends) | Address/IP of the RDS instance from step 6 |
 | `<ELB-ID>` | `k8s/frontend.yaml` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
 | `<CERT-ID>` | `k8s/frontend.yaml` | ID of the certificate uploaded to the ELB (console → **ELB → Certificates**) — needed for the HTTPS listener |
 
-Then apply (mysql-secret and both backends first, so the `backend` and `orders-backend` Service DNS names exist before nginx starts):
+Then apply (mysql-secret, db-config and both backends first, so the `backend` and `orders-backend` Service DNS names exist before nginx starts):
 
 ```bash
+kubectl apply -f k8s/db-config.yaml
 kubectl apply -f k8s/backend.yaml
 kubectl rollout status deployment/backend -n sample-app
 kubectl apply -f k8s/orders-backend.yaml

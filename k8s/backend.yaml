@@ -25,11 +25,17 @@ spec:
           env:
             - name: APP_ENV
               value: sky47
-            # Point DB_HOST at the RDS for MySQL instance address (see K8S-DEPLOYMENT.md)
+            # RDS host/port come from the db-config ConfigMap (k8s/db-config.yaml)
             - name: DB_HOST
-              value: 10.10.1.20
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_HOST
             - name: DB_PORT
-              value: "3306"
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_PORT
             - name: DB_NAME
               value: sampleapp
             - name: DB_USER
