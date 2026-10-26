@@ -84,6 +84,7 @@ Images are built from `backend/Dockerfile` and `frontend/Dockerfile`, pushed to 
 
 - Backend image: multi-stage Maven build → Temurin 11 JRE, exposes 8080
 - Orders backend image: same multi-stage Maven build → Temurin 11 JRE, exposes 8080, context path `/orders-api`
-- Frontend image: Node build → nginx, exposes 80, proxies `/api/` to `backend:8080` and `/orders-api/` to `orders-backend:8080` (the k8s Services must keep those names)
+- Public traffic enters through the APISIX API gateway ([apigateway_setup_APISIX](https://github.com/sg616/apigateway_setup_APISIX)), which routes `/api/*` to `backend:8080`, `/orders-api/*` to `orders-backend:8080` and everything else to the frontend (the k8s Services must keep those names)
+- Frontend image: Node build → nginx, exposes 80. It still proxies `/api/` and `/orders-api/` (used only if the gateway is rolled back)
 - DB credentials come from a k8s Secret (`mysql-secret`) referenced in `k8s/backend.yaml` and `k8s/orders-backend.yaml` — see `k8s/mysql-secret.example.yaml`
 - Use `/api/health` and `/orders-api/health` as the probe/LB health check paths

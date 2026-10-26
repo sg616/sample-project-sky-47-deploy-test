@@ -65,7 +65,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  # Must stay "backend" — frontend nginx proxies /api/ to http://backend:8080
+  # Must stay "backend": the APISIX route /api/* targets it (and frontend nginx
+  # still proxies /api/ to http://backend:8080 as a rollback path)
   name: backend
   namespace: sample-app
 spec:

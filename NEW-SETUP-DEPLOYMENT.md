@@ -2,6 +2,9 @@
 
 This guide covers rolling out the **new setup** (backend connected to RDS for MySQL + product CRUD API + catalog frontend) on top of a cluster where the **previous version of the backend and frontend is already running** (namespace `sample-app`, SWR images `sample-backend:1.0.0` / `sample-frontend:1.0.0`, ELB already bound to the frontend Service).
 
+> **Historical guide.** Since 2026-10-26 the frontend no longer has its own LoadBalancer Service: the ELB is bound to the APISIX gateway
+> ([apigateway_setup_APISIX](https://github.com/sg616/apigateway_setup_APISIX)). Ignore the ELB/`frontend` Service steps below, and never re-add that Service.
+
 If you are starting from an empty cluster instead, use [K8S-DEPLOYMENT.md](K8S-DEPLOYMENT.md) (this guide skips cluster, namespace, SWR org, image-pull secret, and ELB setup — all of that already exists).
 
 ## What changes in this rollout
