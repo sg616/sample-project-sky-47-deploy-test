@@ -45,7 +45,7 @@ Notes (manual §6.2.4):
 5. **Step 4 — Configure the collection.**
    - **Collection Configuration Name**: e.g. `sample-app-stdout`.
    - **Data Source**: **Container standard output**; enable **stdout** and **stderr** (choose whether stderr goes to the same file `stdout.log` or a separate `stderr.log`). Ensure **Output to AOM is off**.
-   - **Kubernetes Matching Rules** → **Namespace Name Regular Expression**: `^sample-app$` — limits collection to this app's namespace. (Pod/container name regexes and label white/blacklists are also available; leave empty to collect all.)
+   - **Kubernetes Matching Rules** → **Namespace Name Regular Expression**: `^(sample-app|apisix)$` — limits collection to this app's namespace plus the APISIX API gateway (`apisix`). (Pod/container name regexes and label white/blacklists are also available; leave empty to collect all.)
    - **Structuring Parsing**: leave disabled for raw keyword search, or enable and pick a rule (Single-Line Full-Text, JSON, Delimiter, Regular, Combined) for field-based search.
    - **Log Format**: Single-line; **Log Time**: System time (defaults, recommended by the manual).
 
