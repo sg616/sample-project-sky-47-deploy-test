@@ -44,5 +44,6 @@ spec:
 # No Service here on purpose. Public HTTPS 443 on the shared ELB belongs to the
 # APISIX gateway (repo apigateway_setup_APISIX: k8s/gateway-lb.yaml), which routes
 #   /api/* -> backend:8080, /orders-api/* -> orders-backend:8080, /* -> frontend-internal:80
-# Do NOT add a LoadBalancer Service for the frontend: two Services cannot hold
-# listener 443 on one ELB, and it would take traffic away from the gateway.
+# Do NOT add a LoadBalancer Service for the frontend: CCE refuses a second
+# Service on port 443 of the same ELB, so the apply would fail (and the
+# frontend must not bypass the gateway anyway).
