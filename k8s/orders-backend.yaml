@@ -73,7 +73,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  # Must stay "orders-backend" — frontend nginx proxies /orders-api/ to http://orders-backend:8080
+  # Must stay "orders-backend": the APISIX route /orders-api/* targets it
   name: orders-backend
   namespace: sample-app
 spec:

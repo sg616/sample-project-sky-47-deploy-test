@@ -7,15 +7,20 @@ sky47 is a Huawei Cloud Stack (HCS) based provider — console menu names below 
 ## Architecture
 
 ```
-Browser → ELB (public EIP) → frontend Service (LoadBalancer)
-            → frontend pod (nginx) → /api/        proxied → backend Service (ClusterIP)        → backend pod (Spring Boot)
-                                   → /orders-api/ proxied → orders-backend Service (ClusterIP) → orders-backend pod (Spring Boot)
+Browser → ELB (public EIP, HTTPS 443) → apisix-gateway-lb Service (ns apisix) → APISIX API gateway
+            → /api/*        → backend Service (ClusterIP)           → backend pod (Spring Boot)
+            → /orders-api/* → orders-backend Service (ClusterIP)    → orders-backend pod (Spring Boot)
+            → /*            → frontend-internal Service (ClusterIP) → frontend pod (nginx, Vue SPA)
             → RDS for MySQL 5.7.44 (sampleapp db ← backend, ordersdb db ← orders-backend; same host)
 Container stdout → node log files → ICAgent (on every node) → LTS log stream (CCE ingestion configuration)
 ```
 
+The gateway (APISIX on CCE: routes, rate limiting, request IDs, metrics) and the ELB binding live in a separate repo: [apigateway_setup_APISIX](https://github.com/sg616/apigateway_setup_APISIX). This repo only deploys the app.
+Nothing is publicly reachable until the gateway is installed (step 7).
+
 No application code changes are required:
-- `frontend/nginx.conf` proxies `/api/` to `http://backend:8080` and `/orders-api/` to `http://orders-backend:8080` — in k8s these resolve via the ClusterIP **Services named `backend` and `orders-backend`** in the same namespace. The two path-based routes are deliberately shaped like future API-gateway routes.
+- The gateway routes `/api/*` and `/orders-api/*` straight to the ClusterIP **Services named `backend` and `orders-backend`**, so those names must stay.
+- `frontend/nginx.conf` serves only the static SPA. It no longer proxies the APIs, so the frontend has no dependency on the backend Services.
 - Spring Boot and nginx both log to **stdout/stderr**, which is exactly what the log collector picks up.
 
 ## Prerequisites
@@ -119,15 +124,15 @@ The backend reads its DB connection from environment variables (`DB_HOST`, `DB_P
 
 ## 7. Edit the manifests and deploy
 
-The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to `swr.pk-isb-1.sky47.com/pk-beta-repo/...`. Two placeholders remain to fill in:
+The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to `swr.pk-isb-1.sky47.com/pk-beta-repo/...`. One placeholder remains to fill in:
 
 | Placeholder | Where | Value |
 |---|---|---|
-| `DB_HOST` | `k8s/db-config.yaml` (ConfigMap shared by both backends) | Address/IP of the RDS instance from step 6 |
-| `<ELB-ID>` | `k8s/frontend.yaml` | ID of an existing ELB (console → **ELB → your load balancer → ID**), or switch to the `elb.autocreate` annotation in the file |
-| `<CERT-ID>` | `k8s/frontend.yaml` | ID of the certificate uploaded to the ELB (console → **ELB → Certificates**) — needed for the HTTPS listener |
+| `<rds-mysql-instance-address>` | `k8s/backend.yaml` (`DB_HOST` env) | Internal address/IP of the RDS instance from step 6 |
 
-Then apply (mysql-secret, db-config and both backends first, so the `backend` and `orders-backend` Service DNS names exist before nginx starts):
+The ELB ID and certificate ID are no longer set here: they go in the gateway repo (`k8s/gateway-lb*.yaml`).
+
+Then apply (mysql-secret and both backends first, so the APIs are ready when the gateway starts routing to them):
 
 ```bash
 kubectl apply -f k8s/db-config.yaml
@@ -139,11 +144,12 @@ kubectl apply -f k8s/frontend.yaml
 kubectl rollout status deployment/frontend -n sample-app
 ```
 
-Get the public address:
+Then expose the app through the API gateway: follow the README of [apigateway_setup_APISIX](https://github.com/sg616/apigateway_setup_APISIX)
+(mirror images, install APISIX, test on HTTPS 8443, then bind HTTPS 443). Get the public address:
 
 ```bash
-kubectl get svc frontend -n sample-app
-# EXTERNAL-IP column = ELB address; open https://<EXTERNAL-IP>/ in a browser
+kubectl get svc apisix-gateway-lb -n apisix
+# EXTERNAL-IP column = ELB address; open https://<EXTERNAL-IP>/ (or your domain) in a browser
 ```
 
 Quick checks:
@@ -152,10 +158,10 @@ Quick checks:
 kubectl get pods -n sample-app                                   # all Running/Ready
 kubectl logs deploy/backend -n sample-app                        # Spring Boot startup logs
 kubectl logs deploy/orders-backend -n sample-app                 # orders service startup logs
-kubectl exec -n sample-app deploy/frontend -- wget -qO- http://backend:8080/api/health
-kubectl exec -n sample-app deploy/frontend -- wget -qO- http://orders-backend:8080/orders-api/health
+kubectl exec -n sample-app deploy/frontend -- curl -s http://backend:8080/api/health
+kubectl exec -n sample-app deploy/frontend -- curl -s http://orders-backend:8080/orders-api/health
 curl https://<EXTERNAL-IP>/                                      # frontend HTML
-curl https://<EXTERNAL-IP>/api/health                            # {"status":"UP",...} via nginx proxy
+curl -i https://<EXTERNAL-IP>/api/health                         # {"status":"UP",...} via APISIX (X-Request-Id header set)
 curl https://<EXTERNAL-IP>/api/products                          # seeded product list (JSON)
 curl https://<EXTERNAL-IP>/orders-api/health                     # second backend via its own path
 curl https://<EXTERNAL-IP>/orders-api/orders                     # seeded order list (JSON)
@@ -168,7 +174,7 @@ Both containers already write logs to stdout, so only collection needs configuri
 Full step-by-step instructions (based on the LTS 2.5.0 User Guide): **[CCE-LOG-COLLECTION.md](CCE-LOG-COLLECTION.md)**. In short:
 
 1. **LTS → Host Management → Hosts → CCE Cluster tab** — install/upgrade ICAgent on the cluster (auto-creates log group + host group `k8s-log-{ClusterID}`).
-2. **LTS → Log Ingestion → Ingestion Center → CCE** — pick fixed or custom log stream, run the dependency check (**Auto Correct**), keep host group `k8s-log-{ClusterID}`, data source **Container standard output**, namespace regex `^sample-app$`. Ensure **Output to AOM is disabled**.
+2. **LTS → Log Ingestion → Ingestion Center → CCE** — pick fixed or custom log stream, run the dependency check (**Auto Correct**), keep host group `k8s-log-{ClusterID}`, data source **Container standard output**, namespace regex `^(sample-app|apisix)$` (includes the API gateway's access logs). Ensure **Output to AOM is disabled**.
 3. Verify in **LTS → Log Management** → your stream after generating traffic.
 
 ## 9. Releasing an update
@@ -185,8 +191,8 @@ kubectl rollout status deployment/backend -n sample-app
 ## 10. Network / security group notes
 
 - **Worker node security group** (created with the cluster): keep the CCE-generated rules; do not delete them. No extra inbound rule is needed for pod traffic — the ELB reaches NodePorts via the VPC.
-- **ELB**: must be a **public** ELB (has an EIP) for browser access. An HTTPS listener on port 443 (with the uploaded certificate) is created automatically by the Service; TLS terminates at the ELB and traffic to nginx stays HTTP.
-- Do **not** expose the backend with its own LoadBalancer/NodePort — it stays ClusterIP, reachable only inside the cluster via nginx.
+- **ELB**: must be a **public** ELB (has an EIP) for browser access. The HTTPS listener on port 443 (with the uploaded certificate) is created by the gateway's `apisix-gateway-lb` Service. TLS terminates at the ELB, and traffic to APISIX and the pods stays HTTP inside the VPC.
+- Do **not** give any app Service (frontend or backends) its own LoadBalancer/NodePort. They stay ClusterIP, reachable from outside only through the gateway.
 - If kubectl access from your laptop is needed, bind an EIP to the cluster API server and restrict its allowed CIDR to your IP.
 
 ## Troubleshooting
@@ -195,9 +201,8 @@ kubectl rollout status deployment/backend -n sample-app
 |---|---|
 | Pod `ImagePullBackOff` | `kubectl describe pod` — check image path matches SWR exactly; ensure `default-secret` exists in `sample-app` (step 5); if image is Private, secret must use a long-term key |
 | `exec format error` in pod logs | Image built for wrong CPU arch — rebuild with `--platform linux/amd64` |
-| frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
-| frontend pod CrashLoop: `host not found in upstream "orders-backend"` | Orders backend Service missing — apply `k8s/orders-backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
-| Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`, or autocreate JSON invalid — `kubectl describe svc frontend -n sample-app` shows the event error |
+| Gateway Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`/`elb.cert-id` in the gateway repo, or another Service already holds port 443 on that ELB. `kubectl describe svc apisix-gateway-lb -n apisix` shows the event error |
+| Public URL returns 404/502 but pods are Ready | Gateway side: see the troubleshooting table in the gateway repo README (route status, controller sync logs) |
 | Backend CrashLoopBackOff with `Communications link failure` in logs | RDS unreachable — check `DB_HOST` in `k8s/backend.yaml`, that `mysql-secret` exists with the right credentials, and that the RDS security group allows TCP 3306 from the cluster nodes |
 | Backend starts but `/api/products` returns 500 | `products` table missing or schema drift — run `dbscripts/001_create_products.sql` against the `sampleapp` database; confirm `DB_NAME` matches |
 | `/api/info` shows `"database":{"status":"DOWN"}` | Backend is up but the DB connection fails — check credentials/security group as above, then look at backend logs |
