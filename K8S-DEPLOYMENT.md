@@ -135,6 +135,7 @@ The ELB ID and certificate ID are no longer set here: they go in the gateway rep
 Then apply (mysql-secret and both backends first, so the APIs are ready when the gateway starts routing to them):
 
 ```bash
+kubectl apply -f k8s/db-config.yaml
 kubectl apply -f k8s/backend.yaml
 kubectl rollout status deployment/backend -n sample-app
 kubectl apply -f k8s/orders-backend.yaml

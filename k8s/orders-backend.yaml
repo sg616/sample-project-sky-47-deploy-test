@@ -25,12 +25,18 @@ spec:
           env:
             - name: APP_ENV
               value: sky47
-            # Same RDS host as the catalog backend, but a DIFFERENT database (ordersdb).
-            # Create it with dbscripts/003_create_orders_db.sql.
+            # Same RDS host as the catalog backend (db-config ConfigMap), but a
+            # DIFFERENT database (ordersdb). Create it with dbscripts/003_create_orders_db.sql.
             - name: DB_HOST
-              value: 10.10.1.20
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_HOST
             - name: DB_PORT
-              value: "3306"
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_PORT
             - name: DB_NAME
               value: ordersdb
             - name: DB_USER

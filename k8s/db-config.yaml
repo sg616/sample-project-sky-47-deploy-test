@@ -1,0 +1,13 @@
+# Shared RDS connection settings for backend and orders-backend.
+# To change the DB server: edit DB_HOST here, then
+#   kubectl apply -f k8s/db-config.yaml
+#   kubectl rollout restart deployment/backend deployment/orders-backend -n sample-app
+# (env vars from a ConfigMap are only read at pod start.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+  namespace: sample-app
+data:
+  DB_HOST: "138.252.175.8"
+  DB_PORT: "3306"
