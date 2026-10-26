@@ -185,7 +185,13 @@ kubectl set image deployment/backend backend=$SWR/$ORG/sample-backend:1.0.1 -n s
 kubectl rollout status deployment/backend -n sample-app
 ```
 
-(Or edit the tag in `k8s/backend.yaml` and `kubectl apply -f` it — keeps the file as the source of truth.)
+Since the Jenkins pipeline deploys images (`kubectl set image`, tags like `main-<sha>-<build>`), **the image tags in `k8s/*.yaml` are stale**.
+
+> **Warning:** `kubectl apply -f k8s/backend.yaml` (or `orders-backend.yaml`) rolls the backend **back to the old tag in the file**.
+> On 2026-10-26 this happened on beta: Jenkins had deployed `main-11bc939-6`, and an apply put `sample-backend:1.1.0` / `sample-orders-backend:1.0.0` back.
+> For manifest changes (env, probes, resources), first set the file's image to the running one:
+> `kubectl -n sample-app get deploy backend -o jsonpath='{.spec.template.spec.containers[0].image}'`
+> Or change the live object with `kubectl patch`/`kubectl set env` and commit the same change here.
 
 ## 10. Network / security group notes
 
@@ -193,6 +199,18 @@ kubectl rollout status deployment/backend -n sample-app
 - **ELB**: must be a **public** ELB (has an EIP) for browser access. The HTTPS listener on port 443 (with the uploaded certificate) is created by the gateway's `apisix-gateway-lb` Service. TLS terminates at the ELB, and traffic to APISIX and the pods stays HTTP inside the VPC.
 - Do **not** give any app Service (frontend or backends) its own LoadBalancer/NodePort. They stay ClusterIP, reachable from outside only through the gateway.
 - If kubectl access from your laptop is needed, bind an EIP to the cluster API server and restrict its allowed CIDR to your IP.
+
+## 11. Tracing (OpenTelemetry)
+
+Both backends run the **OpenTelemetry Java agent**. No code or image change is needed:
+- an `otel-agent` initContainer copies `javaagent.jar` (image `autoinstrumentation-java`, mirrored to SWR) into an emptyDir, and `JAVA_TOOL_OPTIONS` loads it
+- spans (HTTP server, JDBC/MySQL) go to Tempo in the `observability` namespace (`OTEL_EXPORTER_OTLP_ENDPOINT`)
+- `OTEL_TRACES_SAMPLER=parentbased_always_off`: only requests that came through the APISIX gateway (which starts the trace) are traced, so kubelet probes are not
+- `LOGGING_PATTERN_LEVEL` adds `[trace_id=…]` to every log line, so Grafana can jump from a log line to its trace
+
+The stack (Grafana, Loki, Tempo, Prometheus) and the live rollout script are in the gateway repo: `apigateway_setup_APISIX/observability/README.md`.
+On a running cluster the agent is added with `observability/scripts/instrument.sh <service>` (a patch that keeps the deployed image), not by applying these files.
+Remove it: `kubectl -n sample-app rollout undo deploy/<service>`.
 
 ## Troubleshooting
 
