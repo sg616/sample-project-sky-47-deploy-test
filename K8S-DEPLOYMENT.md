@@ -20,7 +20,7 @@ Nothing is publicly reachable until the gateway is installed (step 7).
 
 No application code changes are required:
 - The gateway routes `/api/*` and `/orders-api/*` straight to the ClusterIP **Services named `backend` and `orders-backend`**, so those names must stay.
-- `frontend/nginx.conf` still proxies `/api/` and `/orders-api/` to the same Services. Public traffic no longer uses that path; it is kept so the gateway rollback (nginx back on the ELB) keeps working.
+- `frontend/nginx.conf` serves only the static SPA. It no longer proxies the APIs, so the frontend has no dependency on the backend Services.
 - Spring Boot and nginx both log to **stdout/stderr**, which is exactly what the log collector picks up.
 
 ## Prerequisites
@@ -132,7 +132,7 @@ The image paths in `k8s/backend.yaml` and `k8s/frontend.yaml` are already set to
 
 The ELB ID and certificate ID are no longer set here: they go in the gateway repo (`k8s/gateway-lb*.yaml`).
 
-Then apply (mysql-secret and both backends first, so the `backend` and `orders-backend` Service DNS names exist before nginx starts):
+Then apply (mysql-secret and both backends first, so the APIs are ready when the gateway starts routing to them):
 
 ```bash
 kubectl apply -f k8s/backend.yaml
@@ -157,8 +157,8 @@ Quick checks:
 kubectl get pods -n sample-app                                   # all Running/Ready
 kubectl logs deploy/backend -n sample-app                        # Spring Boot startup logs
 kubectl logs deploy/orders-backend -n sample-app                 # orders service startup logs
-kubectl exec -n sample-app deploy/frontend -- wget -qO- http://backend:8080/api/health
-kubectl exec -n sample-app deploy/frontend -- wget -qO- http://orders-backend:8080/orders-api/health
+kubectl exec -n sample-app deploy/frontend -- curl -s http://backend:8080/api/health
+kubectl exec -n sample-app deploy/frontend -- curl -s http://orders-backend:8080/orders-api/health
 curl https://<EXTERNAL-IP>/                                      # frontend HTML
 curl -i https://<EXTERNAL-IP>/api/health                         # {"status":"UP",...} via APISIX (X-Request-Id header set)
 curl https://<EXTERNAL-IP>/api/products                          # seeded product list (JSON)
@@ -200,8 +200,6 @@ kubectl rollout status deployment/backend -n sample-app
 |---|---|
 | Pod `ImagePullBackOff` | `kubectl describe pod` — check image path matches SWR exactly; ensure `default-secret` exists in `sample-app` (step 5); if image is Private, secret must use a long-term key |
 | `exec format error` in pod logs | Image built for wrong CPU arch — rebuild with `--platform linux/amd64` |
-| frontend pod CrashLoop: `host not found in upstream "backend"` | Backend Service missing — apply `k8s/backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
-| frontend pod CrashLoop: `host not found in upstream "orders-backend"` | Orders backend Service missing — apply `k8s/orders-backend.yaml` first, then restart frontend: `kubectl rollout restart deploy/frontend -n sample-app` |
 | Gateway Service `EXTERNAL-IP` stuck `<pending>` | Wrong/missing `kubernetes.io/elb.id`/`elb.cert-id` in the gateway repo, or another Service already holds port 443 on that ELB. `kubectl describe svc apisix-gateway-lb -n apisix` shows the event error |
 | Public URL returns 404/502 but pods are Ready | Gateway side: see the troubleshooting table in the gateway repo README (route status, controller sync logs) |
 | Backend CrashLoopBackOff with `Communications link failure` in logs | RDS unreachable — check `DB_HOST` in `k8s/backend.yaml`, that `mysql-secret` exists with the right credentials, and that the RDS security group allows TCP 3306 from the cluster nodes |
